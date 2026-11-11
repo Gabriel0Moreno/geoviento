@@ -11,6 +11,11 @@
   "Copiar diagnóstico" (copia el texto para pegarlo en el chat).
 - Open-Meteo y met.no ahora se prueban EN PARALELO y gana la primera que
   responde bien. El último reporte bueno se guarda en el teléfono.
+- Workflow (11 nov 2026, sin cambio de versión): caché de Gradle desactivado
+  (`cache-disabled: true`) porque el servicio de caché de GitHub estuvo caído y
+  tumbó 7 compilaciones seguidas ("Cache service responded with 400"). Sin
+  caché, Gradle se descarga fresco cada vez y la compilación ya no depende de
+  ese servicio.
 
 ## [1.0.2] - 2026-11-11
 - La v1.0.1 abría pero se quedaba en "Cargando viento en vivo…" y se cerraba sin
