@@ -1,5 +1,17 @@
 # Changelog — GeoViento
 
+## [1.0.3] - 2026-11-11
+- La v1.0.2 seguía atorada en "Cargando…" sin mostrar nada: TODA la interfaz
+  estaba detrás de la carga de datos. Ahora la interfaz SIEMPRE se ve: al abrir
+  muestra los datos de ejemplo de la demo de ayer (marcados EJEMPLO, nunca para
+  decidir un vuelo) o los últimos datos guardados, y los reemplaza con datos en
+  vivo en cuanto llegan. Nunca más pantalla blanca.
+- Diagnóstico de conexión en la app: qué fuente respondió y cuál falló, con el
+  mensaje exacto del error y los milisegundos; botones "Probar conexión" y
+  "Copiar diagnóstico" (copia el texto para pegarlo en el chat).
+- Open-Meteo y met.no ahora se prueban EN PARALELO y gana la primera que
+  responde bien. El último reporte bueno se guarda en el teléfono.
+
 ## [1.0.2] - 2026-11-11
 - La v1.0.1 abría pero se quedaba en "Cargando viento en vivo…" y se cerraba sin
   mostrar datos ni error. Blindaje defensivo: red en Dispatchers.IO con timeout

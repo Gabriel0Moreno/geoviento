@@ -71,4 +71,4 @@ compilarse: falló antes de descargar dependencias o compilar nada.
 ## Estado de compilación
 - 2026-11-11: en esta VM no se pudo compilar (daemon de Gradle falla con "Unexpected type tag 109", build nunca llegó al código). JDK 17, SDK 34 y Gradle 8.7 sí quedaron instalados aquí.
 - GitHub Actions (`/.github/workflows/android.yml`) compila la APK en cada push a main. Descarga: Actions > run > Artifacts > geoviento-debug-apk. Con tag `vX.Y.Z` además crea un Release con la APK.
-- Versión actual: 1.0.2 (versionCode 3). Para actualizar, ver `docs/ACTUALIZACIONES.md` y `CHANGELOG.md`. Al instalar una APK nueva de Actions, desinstalar primero la anterior: cada build se firma con una clave distinta.
+- Versión actual: 1.0.3 (versionCode 4). Para actualizar, ver `docs/ACTUALIZACIONES.md` y `CHANGELOG.md`. Al instalar una APK nueva de Actions, desinstalar primero la anterior: cada build se firma con una clave distinta.
