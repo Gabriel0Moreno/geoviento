@@ -14,9 +14,10 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
   // La interfaz NUNCA abre vacía: al arrancar muestra datos guardados y, si no
   // hay, los datos de ejemplo de la demo (marcados como EJEMPLO). Los datos
   // en vivo los reemplazan en cuanto llegan.
-  val report = MutableStateFlow<WindReport>(ReportCache.load(context) ?: exampleReport(16.75, -93.11))
+  private val initialReport: WindReport? = ReportCache.load(context)
+  val report = MutableStateFlow<WindReport>(initialReport ?: exampleReport(16.75, -93.11))
   // Origen de lo que se muestra: "en vivo", "guardado" o "ejemplo".
-  val origin = MutableStateFlow(if (ReportCache.load(context) != null) "guardado" else "ejemplo")
+  val origin = MutableStateFlow(if (initialReport != null) "guardado" else "ejemplo")
   val error = MutableStateFlow<String?>(null)
   val loading = MutableStateFlow(false)
   val diag = MutableStateFlow<List<DiagEntry>>(emptyList())
