@@ -5,9 +5,9 @@ Nombre de la app: **Geoviento Mx**. Icono: logo oficial de GeoVisión Aérea Chi
 App para Gabo / GeoVisión Aérea Chiapas. Antes de volar, muestra viento y ráfagas en tu ubicación, en el mapa con relieve, y un semáforo de vuelo para dron sub-250 g.
 
 ## Datos reales (verificado 2026-11-11)
-- **Principal: Open-Meteo Forecast API, gratis y sin API key.** Da viento y ráfagas a 10 m, 80 m y 120 m (altura de dron), pronóstico por hora 3 días.
-  `https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_speed_120m,wind_direction_120m,wind_gusts_120m&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_120m,wind_gusts_120m&wind_speed_unit=ms&forecast_days=3&timezone=America/Mexico_City`
-- **Respaldo: api.met.no locationforecast 2.0** (gratis, sin key, solo viento medio, sin ráfagas). Verificado en vivo en Tuxtla (16.75, -93.11, 534 m): 22.5 °C, viento 2.5 m/s desde 346°.
+- **Principal: Open-Meteo Forecast API, gratis y sin API key.** Da viento a 10 m, 80 m y 120 m (altura de dron) y ráfagas SOLO a 10 m, pronóstico por hora 3 días. OJO: Open-Meteo NO tiene `wind_gusts_80m` ni `wind_gusts_120m` (pedirlos da HTTP 400, bug corregido en v1.0.1); la ráfaga a 120 m se estima como gust10 * (speed120 / speed10).
+  `https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m&wind_speed_unit=ms&forecast_days=3&timezone=America/Mexico_City`
+- **Respaldo: api.met.no locationforecast 2.0** (gratis, sin key, solo viento medio, sin ráfagas; la app lo consulta de verdad si Open-Meteo falla, y estima la ráfaga como viento * 1.4). Verificado en vivo en Tuxtla (16.75, -93.11, 534 m): 22.5 °C, viento 2.5 m/s desde 346°.
 - **Mapa y relieve: MapLibre GL Android + OpenStreetMap + raster-dem** (hillshade y terreno 3D). Sin key de Google.
 - **Corrientes:** el mapa anima partículas interpoladas de una rejilla 5x5 de puntos Open-Meteo alrededor de tu ubicación. Es interpolación de pronóstico por modelo, no medición con anemómetro. No inventa sensores.
 
