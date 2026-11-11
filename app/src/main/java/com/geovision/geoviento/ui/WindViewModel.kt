@@ -10,8 +10,14 @@ class WindViewModel : ViewModel() {
   val error = MutableStateFlow<String?>(null)
   val loading = MutableStateFlow(false)
   fun refresh(lat: Double, lon: Double) {
-    viewModelScope.launch { loading.value = true; error.value = null
-      try { report.value = repo.now(lat, lon) } catch (e: Exception) { error.value = "No se pudo actualizar con Open-Meteo (${e.message}). Revisa internet o espera unos minutos; el límite diario por IP a veces se agota." }
+    viewModelScope.launch {
+      loading.value = true; error.value = null
+      try {
+        report.value = repo.now(lat, lon)
+      } catch (e: Exception) {
+        // El repositorio ya intentó Open-Meteo y luego met.no; si llegamos aquí, fallaron los dos.
+        error.value = "No se pudo actualizar el viento (${e.message}). Revisa tu internet y toca Actualizar ahora."
+      }
       loading.value = false
     }
   }
