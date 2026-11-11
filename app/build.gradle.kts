@@ -1,7 +1,7 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose") }
 android {
   namespace = "com.geovision.geoviento"; compileSdk = 34
-  defaultConfig { applicationId = "com.geovision.geoviento"; minSdk = 26; targetSdk = 34; versionCode = 5; versionName = "1.0.4" }
+  defaultConfig { applicationId = "com.geovision.geoviento"; minSdk = 26; targetSdk = 34; versionCode = 6; versionName = "1.0.5" }
   buildFeatures { compose = true }
   compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
   kotlinOptions { jvmTarget = "17" }
