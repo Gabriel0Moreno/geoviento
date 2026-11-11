@@ -13,11 +13,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,14 +29,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
+import com.geovision.geoviento.data.DRONES
 import com.geovision.geoviento.data.HourlyPoint
 import com.geovision.geoviento.data.WindReport
-import com.geovision.geoviento.data.exampleReport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.pow
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
   // Tuxtla por defecto si aún no hay GPS: 16.75, -93.11
@@ -80,6 +78,12 @@ class MainActivity : ComponentActivity() {
       val loading by vm.loading.collectAsState()
       val diag by vm.diag.collectAsState()
       val lastAttempt by vm.lastAttempt.collectAsState()
+      val drone by vm.drone.collectAsState()
+      val dayReport by vm.dayReport.collectAsState()
+      val dayLoading by vm.dayLoading.collectAsState()
+      val dayError by vm.dayError.collectAsState()
+      val weekRef by vm.weekRef.collectAsState()
+      val places by vm.places.collectAsState()
       val context = LocalContext.current
       var lat by remember { mutableStateOf(16.75) }
       var lon by remember { mutableStateOf(-93.11) }
@@ -101,28 +105,34 @@ class MainActivity : ComponentActivity() {
         while (true) { delay(15 * 60 * 1000L); vm.refresh(lat, lon) }
       }
 
-      // Estado de la demo: hora seleccionada, corrientes, altura y checklist.
+      // Estado de la demo: hora seleccionada, corrientes, zonas y checklist.
       var selectedHour by remember { mutableStateOf(-1) } // -1 = ahora
       var showCurrents by remember { mutableStateOf(true) }
       var playing by remember { mutableStateOf(true) }
       var intensity by remember { mutableStateOf(1f) }
       var selectedZone by remember { mutableStateOf<String?>(null) }
-      var altitude by remember { mutableStateOf(60f) }
-      var checkBattery by remember { mutableStateOf(false) }
-      var checkRth by remember { mutableStateOf(false) }
-      var checkClear by remember { mutableStateOf(false) }
-      var checkWeather by remember { mutableStateOf(false) }
+      var checklist by remember { mutableStateOf(List(6) { false }) }
       var pdfBusy by remember { mutableStateOf(false) }
+
+      // Estado de la sección del informe PDF (como en la demo).
+      var pdfPlace by remember { mutableStateOf("Centro de Tuxtla Gutiérrez, Chiapas") }
+      var pdfLat by remember { mutableStateOf("16.7552") }
+      var pdfLon by remember { mutableStateOf("-93.1154") }
+      var pdfQuery by remember { mutableStateOf("") }
+      var pdfDay by remember { mutableStateOf(vm.today()) }
+      var pdfHour by remember { mutableStateOf("08:00") }
+      var pdfAltitude by remember { mutableStateOf(60) }
 
       // La interfaz SIEMPRE se ve: si aún no hay datos en vivo, se muestra el
       // ejemplo de la demo (marcado) o los datos guardados. Nunca pantalla blanca.
       val report: WindReport = rep
+      val limit = drone.limit
       MaterialTheme {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-          // Encabezado de marca.
+          // Encabezado de marca (como en la demo).
           Text("Geoviento Mx — Viento para dron", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF0A2E4D))
-          Text("Tuxtla: %.4f, %.4f".format(lat, lon), style = MaterialTheme.typography.bodyMedium)
-          Text("Datos: " + (report.now.time ?: "—") + "  •  Fuente: " + report.source, style = MaterialTheme.typography.bodySmall)
+          Text("TUXTLA GUTIÉRREZ, CHIAPAS · %.3f° N, %.3f° O · %s M S. N. M.".format(lat, -lon, report.surface?.elevation?.let { "%.0f".format(it) } ?: "535"), style = MaterialTheme.typography.bodySmall)
+          Text("Datos consultados: " + (report.now.time ?: "—") + "  •  Fuente: " + report.source, style = MaterialTheme.typography.bodySmall)
           if (!hasPermission) Text("Sin permiso de ubicación: se usan las coordenadas de Tuxtla.", style = MaterialTheme.typography.bodySmall)
           if (loading) Text("Actualizando…", style = MaterialTheme.typography.bodySmall)
           Spacer(Modifier.height(12.dp))
@@ -172,7 +182,7 @@ class MainActivity : ComponentActivity() {
           Spacer(Modifier.height(12.dp))
 
           val n = report.now
-          val level = flightLevel(n.gust10)
+          val level = flightLevel(n.gust10, limit)
           val levelColor = when (level) {
             FlightLevel.GREEN -> Color(0xFF1B7A3D)
             FlightLevel.YELLOW -> Color(0xFF8A6D00)
@@ -184,8 +194,20 @@ class MainActivity : ComponentActivity() {
               Text(level.label, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
               Text("Ráfaga 10 m: %.1f m/s (%.0f km/h)".format(n.gust10, kmh(n.gust10)), color = Color.White, style = MaterialTheme.typography.titleMedium)
               Text(level.advice, color = Color.White)
-              Text("Límite dron <249 g (DJI Lito X1): 10.7 m/s. La ráfaga manda, no el viento medio.", color = Color.White, style = MaterialTheme.typography.bodySmall)
-              Text(bestWindowText(report.hourly), color = Color.White, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+              Text("Límite ${drone.name}: %.1f m/s. La ráfaga manda, no el viento medio.".format(limit), color = Color.White, style = MaterialTheme.typography.bodySmall)
+              Text(bestWindowText(report.hourly, limit), color = Color.White, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+            }
+          }
+          Spacer(Modifier.height(8.dp))
+          // Tu dron: el límite elegido mueve el semáforo y el informe PDF.
+          Text("Tu dron (límite por ráfaga)", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+          Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (d in DRONES) {
+              FilterChip(
+                selected = drone.name == d.name,
+                onClick = { vm.drone.value = d },
+                label = { Text("${d.name} · ${d.limit} m/s") }
+              )
             }
           }
           Spacer(Modifier.height(12.dp))
@@ -193,15 +215,21 @@ class MainActivity : ComponentActivity() {
           // 2) Condiciones actuales — como en la demo.
           Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard("Viento sostenido", "%.1f m/s".format(n.speed10), "%.0f km/h  •  %s %.0f°".format(kmh(n.speed10), compass(n.dir10), n.dir10), Modifier.weight(1f))
-            StatCard("Ráfaga máxima", "%.1f m/s".format(n.gust10), "%.0f km/h".format(kmh(n.gust10)), Modifier.weight(1f))
+            StatCard("Ráfaga máxima de hoy", "%.1f m/s".format(report.surface?.gustMaxToday ?: n.gust10), "%.0f km/h".format(kmh(report.surface?.gustMaxToday ?: n.gust10)), Modifier.weight(1f))
           }
           Spacer(Modifier.height(8.dp))
           Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCard("Viento 120 m", n.speed120?.let { "%.1f m/s".format(it) } ?: "—", "altura del dron", Modifier.weight(1f))
-            StatCard("Ráfaga 120 m (est.)", n.gust120Est?.let { "%.1f m/s".format(it) } ?: "—", "estimada, no medida", Modifier.weight(1f))
+            StatCard("Temperatura", n.temp?.let { "%.1f °C".format(it) } ?: "—", "Máxima de hoy: " + (report.surface?.tempMaxToday?.let { "%.0f °C".format(it) } ?: "—"), Modifier.weight(1f))
+            StatCard("Límite — ${drone.name}", "%.1f m/s".format(limit), "Resistencia al viento de referencia", Modifier.weight(1f))
           }
-          Spacer(Modifier.height(8.dp))
-          Text("Temp: " + (n.temp?.let { "%.1f °C".format(it) } ?: "—"), style = MaterialTheme.typography.bodyMedium)
+          Spacer(Modifier.height(12.dp))
+
+          // Aviso de la tarde + condiciones en superficie + leyenda.
+          AfternoonWarning(report, limit)
+          Spacer(Modifier.height(12.dp))
+          SurfaceConditions(report, limit)
+          Spacer(Modifier.height(12.dp))
+          SemaphoreLegend(limit)
           Spacer(Modifier.height(12.dp))
 
           // 3) Brújula + dirección.
@@ -220,19 +248,17 @@ class MainActivity : ComponentActivity() {
           }
           Spacer(Modifier.height(12.dp))
 
-          // 4) Gráfica hora por hora — como en la demo.
-          if (report.hourly.isNotEmpty()) {
-            Text("Viento y ráfagas hora por hora", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              for (p in report.hourly.take(24)) HourlyBar(p)
-            }
-            Text("Verde < 8 m/s, amarillo 8–10.7, rojo ≥ 10.7 (no volar).", style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(12.dp))
-          }
+          // 4) Gráfica de líneas hora por hora — como en la demo.
+          HourlyLineChart(report.hourly, limit)
+          Spacer(Modifier.height(12.dp))
 
-          // 5) Mapa de corrientes con selector de hora — como en la demo.
-          Text("Corrientes en el mapa", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+          // 5) Ventanas del día — como en la demo.
+          WindowCards(report.hourly, limit)
+          Spacer(Modifier.height(12.dp))
+
+          // 6) Mapa real con corrientes y zonas — como en la demo.
+          Text("Mapa: zonas de vuelo y relieve", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+          Text("El valle de Tuxtla corre de oeste a este entre la Meseta de Copoya (sur) y la entrada del Cañón del Sumidero (norte). Con viento del norte y noroeste, el cañón canaliza el aire hacia la ciudad y la meseta genera turbulencia en su lado protegido. La herramienta de corrientes dibuja el flujo directamente sobre el mapa, hora por hora: elige la hora y sigue las flechas. Toca una zona para ubicarla en el mapa.", style = MaterialTheme.typography.bodySmall)
           Spacer(Modifier.height(8.dp))
           val hourPoint: HourlyPoint? = if (selectedHour in report.hourly.indices) report.hourly[selectedHour] else null
           val mapDir = hourPoint?.dir10 ?: n.dir10
@@ -252,76 +278,134 @@ class MainActivity : ComponentActivity() {
           Spacer(Modifier.height(8.dp))
           Text("Intensidad del flujo", style = MaterialTheme.typography.bodyMedium)
           Slider(value = intensity, onValueChange = { intensity = it }, valueRange = 0.5f..2f)
-          Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-              if (showCurrents) {
-                CurrentsMap(mapDir, mapGust, playing, intensity, selectedZone, { selectedZone = it }, Modifier.fillMaxWidth().height(220.dp))
-              } else {
-                Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { Text("Corrientes ocultas") }
-              }
-              Spacer(Modifier.height(8.dp))
-              Text("Esquema de corrientes, no mapa satelital en vivo. Flechas en la dirección del viento " + (if (hourPoint != null) "a las " + hourLabel(hourPoint.time) else "ahora") + ". Toca una zona para ver su nota.", style = MaterialTheme.typography.bodySmall)
-              selectedZone?.let { zn ->
-                val zone = TUxtla_ZONES.firstOrNull { it.name == zn }
-                zone?.let { Text("📍 ${it.name}: ${it.note}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold) }
-              }
+          if (showCurrents) {
+            RealMap(lat, lon, mapDir, mapGust, limit, playing, intensity, selectedZone, { selectedZone = it }) {
+              CurrentsMap(mapDir, mapGust, playing, intensity, selectedZone, { selectedZone = it }, Modifier.fillMaxWidth().height(220.dp))
             }
+          } else {
+            Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { Text("Corrientes ocultas") }
           }
+          Spacer(Modifier.height(8.dp))
+          val flowHour = hourPoint?.let { hourLabel(it.time) } ?: "Ahora"
+          Text("$flowHour: Viento desde el ${compass(mapDir)} (${mapDir.toInt()}°), el aire se mueve hacia el ${compass((mapDir + 180) % 360)}. Sostenido %.1f m/s, ráfaga %.1f m/s. En la boca del cañón, la canalización puede subir la ráfaga local a ≈ %.1f m/s.".format(n.speed10, mapGust, mapGust * 1.45), style = MaterialTheme.typography.bodySmall)
+          Text("Flecha = hacia dónde se mueve el aire  •  Verde < %.1f m/s  •  Amarillo %.1f–%.1f m/s  •  Rojo ≥ %.1f m/s".format(limit * 0.75, limit * 0.75, limit, limit), style = MaterialTheme.typography.bodySmall)
+          Text("Capa esquemática a partir de la dirección y la ráfaga del pronóstico de hoy: no es una medición en sitio.", style = MaterialTheme.typography.bodySmall)
+          Spacer(Modifier.height(8.dp))
+          ZoneCards(selectedZone) { selectedZone = it }
           Spacer(Modifier.height(12.dp))
 
-          // 6) Cómo se mueve el aire hoy sobre el relieve — como en la demo.
-          Text("Cómo se mueve el aire hoy sobre el relieve", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-          Spacer(Modifier.height(4.dp))
-          Text("En el Cañón del Sumidero el viento se canaliza entre las paredes y la ráfaga local puede subir ~45%%: %.1f m/s.".format(n.gust10 * 1.45))
-          Text("En Copoya el aire sube por la ladera y puede empujar el dron hacia arriba. En Chiapa de Corzo la brisa del río cambia la dirección por la tarde.")
+          // 7) Cómo se mueve el aire sobre el relieve — como en la demo.
+          ReliefSection()
           Spacer(Modifier.height(12.dp))
 
-          // 7) Calculadora de viento por altura — como en la demo.
-          Text("Calculadora de viento por altura", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-          val altSpeed = n.speed10 * (altitude / 10.0).pow(0.14)
-          val altGust = n.gust10 * (altitude / 10.0).pow(0.14)
-          Text("Altura: %.0f m".format(altitude), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-          Slider(value = altitude, onValueChange = { altitude = it }, valueRange = 10f..120f)
-          Text("A %.0f m: viento %.1f m/s, ráfaga est. %.1f m/s (factor ×%.2f). Estimación por ley de potencia, no medición.".format(altitude, altSpeed, altGust, (altitude / 10.0).pow(0.14)))
+          // 8) Calculadora de viento por altura — como en la demo.
+          AltitudeCalculator(report, limit) {}
+          Spacer(Modifier.height(8.dp))
           Text("10 m: %.1f m/s, ráfaga %.1f m/s".format(n.speed10, n.gust10))
           Text("80 m: " + (n.speed80?.let { "%.1f m/s".format(it) } ?: "—") + (n.dir80?.let { " (%s)".format(compass(it)) } ?: ""))
           Text("120 m: " + (n.speed120?.let { "%.1f m/s".format(it) } ?: "—") + (n.dir120?.let { " (%s)".format(compass(it)) } ?: "") + ", ráfaga est. " + (n.gust120Est?.let { "%.1f m/s".format(it) } ?: "—"))
           Spacer(Modifier.height(12.dp))
 
-          // 8) Checklist antes de despegar — como en la demo.
-          Text("Antes de despegar hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-          CheckRow("Ráfaga por debajo de 10.7 m/s", n.gust10 < 10.7, enabled = false, onChange = {})
-          CheckRow("Batería cargada", checkBattery, enabled = true, onChange = { checkBattery = it })
-          CheckRow("Regreso a casa activado", checkRth, enabled = true, onChange = { checkRth = it })
-          CheckRow("Zona despejada de personas", checkClear, enabled = true, onChange = { checkClear = it })
-          CheckRow("Sin lluvia ni tormenta cerca", checkWeather, enabled = true, onChange = { checkWeather = it })
+          // 9) Checklist antes de despegar — como en la demo.
+          PreflightChecklist(report, limit, checklist) { i ->
+            checklist = checklist.mapIndexed { j, v -> if (j == i) !v else v }
+          }
           Spacer(Modifier.height(12.dp))
 
-          // 9) Informe técnico en PDF — como en la demo.
-          Button(
-            onClick = {
-              if (!pdfBusy) {
-                pdfBusy = true
-                scope.launch {
-                  val uri = withContext(Dispatchers.IO) {
-                    PdfReport.generate(this@MainActivity, report, lat, lon, altitude.toInt(), checkBattery && checkRth && checkClear && checkWeather)
-                  }
-                  pdfBusy = false
-                  if (uri != null) {
-                    Toast.makeText(this@MainActivity, "Informe guardado en Descargas", Toast.LENGTH_LONG).show()
-                    try {
-                      val open = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/pdf"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-                      startActivity(open)
-                    } catch (_: Exception) {}
-                  } else {
-                    Toast.makeText(this@MainActivity, "No se pudo generar el PDF", Toast.LENGTH_LONG).show()
+          // 10) Informe técnico de vuelo en PDF — como en la demo.
+          Text("Informe técnico de vuelo en PDF", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+          Text("HOY O UN DÍA PASADO · CUALQUIER UBICACIÓN", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+          Text("Elige la ubicación y el día, consulta los datos y descarga el informe PDF listo para guardar junto a tu bitácora de vuelo. Para hoy usa el pronóstico de Open-Meteo junto con el archivo histórico de Open-Meteo (ERA5). El PDF incluye datos de la hora elegida, tabla hora por hora, viento estimado a tu altura, la orientación de las corrientes: de dónde viene el aire, hacia dónde se mueve y cómo lo modifican el Cañón del Sumidero y la Meseta de Copoya.", style = MaterialTheme.typography.bodySmall)
+          Spacer(Modifier.height(8.dp))
+          Text("Ubicación del vuelo", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+          Text("Sitio seleccionado: $pdfPlace", style = MaterialTheme.typography.bodySmall)
+          OutlinedTextField(value = pdfQuery, onValueChange = { pdfQuery = it }, label = { Text("Buscar otra ubicación por nombre") }, modifier = Modifier.fillMaxWidth())
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.searchPlaces(pdfQuery) }) { Text("Buscar") }
+            OutlinedButton(onClick = {
+              pdfLat = "%.4f".format(lat); pdfLon = "%.4f".format(lon)
+              pdfPlace = "Mi ubicación actual (%.4f, %.4f)".format(lat, lon)
+            }) { Text("Usar mi ubicación actual") }
+          }
+          places.forEach { p ->
+            TextButton(onClick = {
+              pdfPlace = if (p.detail.isBlank()) p.name else "${p.name}, ${p.detail}"
+              pdfLat = "%.4f".format(p.lat); pdfLon = "%.4f".format(p.lon)
+              vm.places.value = emptyList()
+            }) { Text("${p.name} — ${p.detail}") }
+          }
+          Spacer(Modifier.height(8.dp))
+          Text("Latitud: $pdfLat   Longitud: $pdfLon", style = MaterialTheme.typography.bodySmall)
+          Spacer(Modifier.height(8.dp))
+          Text("Día del informe", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+          val today = vm.today()
+          val dayOptions = listOf(0, 1, 2, 4, 7).map { today.minusDays(it.toLong()) }
+          Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (d in dayOptions) {
+              val label = when (d) {
+                today -> "Hoy · ${d.dayOfMonth} ${d.month.name.take(3).lowercase()}"
+                today.minusDays(1) -> "Ayer · ${d.dayOfMonth} ${d.month.name.take(3).lowercase()}"
+                else -> "${d.dayOfMonth} ${d.month.name.take(3).lowercase()}"
+              }
+              FilterChip(selected = pdfDay == d, onClick = { pdfDay = d }, label = { Text(label) })
+            }
+          }
+          Spacer(Modifier.height(8.dp))
+          Text("Hora del vuelo: $pdfHour   •   Altura planeada: $pdfAltitude m", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+          Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (h in listOf("06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00")) {
+              FilterChip(selected = pdfHour == h, onClick = { pdfHour = h }, label = { Text(h) })
+            }
+          }
+          Slider(value = pdfAltitude.toFloat(), onValueChange = { pdfAltitude = it.toInt().coerceIn(10, 120) }, valueRange = 10f..120f)
+          Text("Tu dron (límite por ráfaga): ${drone.name} — límite %.1f m/s".format(limit), style = MaterialTheme.typography.bodySmall)
+          if (weekRef.size >= 4) {
+            Text("Referencia rápida del archivo: en los últimos 7 días la ráfaga máxima diaria fue de %.1f a %.1f m/s, con viento dominante del %.0f° al %.0f° — en rojo para un dron de menos de 249 g.".format(weekRef[0], weekRef[1], weekRef[2], weekRef[3]), style = MaterialTheme.typography.bodySmall)
+          }
+          Spacer(Modifier.height(8.dp))
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+              val la = pdfLat.toDoubleOrNull() ?: lat
+              val lo = pdfLon.toDoubleOrNull() ?: lon
+              vm.consultDay(la, lo, pdfDay)
+            }, enabled = !dayLoading) { Text(if (dayLoading) "Consultando…" else "Consultar datos del día") }
+            Button(
+              onClick = {
+                if (!pdfBusy) {
+                  pdfBusy = true
+                  scope.launch {
+                    val la = pdfLat.toDoubleOrNull() ?: lat
+                    val lo = pdfLon.toDoubleOrNull() ?: lon
+                    val uri = withContext(Dispatchers.IO) {
+                      PdfReport.generate(this@MainActivity, report, dayReport, la, lo, pdfPlace, pdfHour, pdfAltitude, drone, weekRef, checklist.all { it })
+                    }
+                    pdfBusy = false
+                    if (uri != null) {
+                      Toast.makeText(this@MainActivity, "Informe guardado en Descargas", Toast.LENGTH_LONG).show()
+                      try {
+                        val open = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/pdf"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                        startActivity(open)
+                      } catch (_: Exception) {}
+                    } else {
+                      Toast.makeText(this@MainActivity, "No se pudo generar el PDF", Toast.LENGTH_LONG).show()
+                    }
                   }
                 }
-              }
-            },
-            enabled = !pdfBusy
-          ) { Text(if (pdfBusy) "Generando informe…" else "Descargar informe técnico en PDF") }
-          Text("El informe lleva ubicación, día, hora, altura, modelo de dron (DJI Lito X1) y el semáforo.", style = MaterialTheme.typography.bodySmall)
+              },
+              enabled = !pdfBusy
+            ) { Text(if (pdfBusy) "Generando…" else "Descargar informe PDF") }
+          }
+          dayError?.let { Text(it, color = Color(0xFFB3261E), style = MaterialTheme.typography.bodySmall) }
+          dayReport?.let { dr ->
+            Text("Consultado: ${dr.date} — ráfaga máxima %.1f m/s a las %s, dirección dominante %s. Fuente: ${dr.source}.".format(dr.maxGust, dr.maxGustHour?.substringAfter("T")?.substringBefore(":") ?: "—", dr.dominantDir?.let { compass(it) } ?: "—"), style = MaterialTheme.typography.bodySmall)
+          }
+          Text("Listo. Consulta primero para ver el resumen aquí, o descarga directo: el PDF se genera en tu teléfono con los datos consultados en ese momento.", style = MaterialTheme.typography.bodySmall)
+          Spacer(Modifier.height(12.dp))
+
+          // Pie: fuentes y nota de seguridad (como en la demo).
+          Text("Fuentes de los datos: Open-Meteo (pronóstico y archivo histórico ERA5) y met.no (respaldo). Calidad del aire: Open-Meteo Air Quality.", style = MaterialTheme.typography.bodySmall)
+          Text("Esta app muestra las condiciones al momento de la consulta, pensada para planear el día. El viento puede cambiar en minutos: antes de cada despegue, vuelve a revisar la fuente en vivo. Ante cualquier duda, la decisión segura es no volar.", style = MaterialTheme.typography.bodySmall)
+          Text("Umbrales del semáforo aplicados a ${drone.name} (límite %.1f m/s): verde < %.1f m/s, amarillo %.1f–%.1f m/s, rojo ≥ %.1f m/s, aplicados sobre la ráfaga.".format(limit, limit * 0.75, limit * 0.75, limit, limit), style = MaterialTheme.typography.bodySmall)
           Spacer(Modifier.height(12.dp))
 
           err?.let {
@@ -355,17 +439,18 @@ private fun hourLabel(time: String): String {
   return if (h.length == 2) "$h:00" else time
 }
 
-private fun bestWindowText(hourly: List<HourlyPoint>): String {
+private fun bestWindowText(hourly: List<HourlyPoint>, limit: Double): String {
+  val green = limit * 0.75
   var bestStart = -1; var bestLen = 0; var curStart = -1; var curLen = 0
   for ((i, p) in hourly.take(24).withIndex()) {
-    if (p.gust10 < 8.0) {
+    if (p.gust10 < green) {
       if (curStart == -1) { curStart = i; curLen = 1 } else curLen++
       if (curLen > bestLen) { bestLen = curLen; bestStart = curStart }
     } else { curStart = -1; curLen = 0 }
   }
-  return if (bestStart >= 0 && bestLen >= 2) {
-    "Mejor ventana: " + hourLabel(hourly[bestStart].time) + "–" + hourLabel(hourly[(bestStart + bestLen - 1).coerceAtMost(23)].time) + " (ráfaga < 8 m/s)."
-  } else "Sin ventana verde larga en las próximas 24 h: vigila la ráfaga hora por hora."
+  if (bestStart < 0 || bestLen < 2) return "Sin ventana verde larga en las próximas 24 h: vigila la ráfaga hora por hora."
+  if (bestLen >= 24) return "Todo el día en verde (ráfaga < %.1f m/s).".format(green)
+  return "Mejor ventana: " + hourLabel(hourly[bestStart].time) + "–" + hourLabel(hourly[(bestStart + bestLen - 1).coerceAtMost(23)].time) + " (ráfaga < %.1f m/s).".format(green)
 }
 
 @Composable
@@ -376,28 +461,5 @@ private fun StatCard(title: String, value: String, sub: String, modifier: Modifi
       Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
       Text(sub, style = MaterialTheme.typography.bodySmall)
     }
-  }
-}
-
-@Composable
-private fun HourlyBar(p: HourlyPoint) {
-  val level = flightLevel(p.gust10)
-  val color = when (level) {
-    FlightLevel.GREEN -> Color(0xFF1B7A3D)
-    FlightLevel.YELLOW -> Color(0xFFB8860B)
-    FlightLevel.RED -> Color(0xFFB3261E)
-  }
-  Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(52.dp)) {
-    Text("%.0f".format(p.gust10), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-    Box(Modifier.width(28.dp).height(((p.gust10 / 14.0) * 80.0).coerceIn(6.0, 80.0).dp).background(color, RoundedCornerShape(4.dp)))
-    Text(hourLabel(p.time), style = MaterialTheme.typography.bodySmall)
-  }
-}
-
-@Composable
-private fun CheckRow(label: String, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
-  Row(verticalAlignment = Alignment.CenterVertically) {
-    Checkbox(checked = checked, onCheckedChange = onChange, enabled = enabled)
-    Text(label)
   }
 }

@@ -8,15 +8,28 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import com.geovision.geoviento.data.DayReport
+import com.geovision.geoviento.data.DroneOption
 import com.geovision.geoviento.data.WindReport
 import java.io.File
 import java.io.FileOutputStream
 
 // Informe técnico de vuelo en PDF, como en la demo web, pero generado en el
-// teléfono con los datos en vivo (sin depender de internet ni de CDN).
-// Se guarda en Descargas y devuelve su Uri para abrirlo.
+// teléfono con los datos consultados (pronóstico para hoy, archivo ERA5 para
+// días pasados). Se guarda en Descargas y devuelve su Uri para abrirlo.
 object PdfReport {
-  fun generate(context: Context, report: WindReport, lat: Double, lon: Double, altitudeM: Int, checklistOk: Boolean): Uri? {
+  fun generate(
+    context: Context,
+    report: WindReport,
+    day: DayReport?,
+    lat: Double, lon: Double,
+    placeName: String,
+    hour: String,
+    altitudeM: Int,
+    drone: DroneOption,
+    weekRef: List<Double>,
+    checklistOk: Boolean
+  ): Uri? {
     return try {
       val doc = PdfDocument()
       val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
@@ -27,29 +40,38 @@ object PdfReport {
       val body = Paint().apply { textSize = 12f }
       var y = 60f
       fun line(text: String, paint: Paint = body) { canvas.drawText(text, 40f, y, paint); y += 22f }
+      val hourly = day?.hourly ?: report.hourly
+      val chosen = hourly.firstOrNull { it.time.substringAfter("T").startsWith(hour) } ?: hourly.firstOrNull()
+      val factor = logWindFactor(altitudeM.toDouble())
       line("Geoviento Mx — Informe técnico de vuelo", title); y += 8f
-      line("Dron: DJI Lito X1 (<249 g, límite de ráfaga 10.7 m/s)", head)
-      line("Ubicación: Tuxtla Gutiérrez, %.4f, %.4f".format(lat, lon))
-      line("Fecha y hora de los datos: " + (report.now.time ?: "—"))
-      line("Fuente: " + report.source)
+      line("Dron: ${drone.name} (límite de ráfaga ${drone.limit} m/s)", head)
+      line("Ubicación: $placeName, %.4f, %.4f".format(lat, lon))
+      line("Día del informe: " + (day?.date ?: "hoy") + "  •  Hora del vuelo: $hour  •  Altura planeada: $altitudeM m")
+      line("Fuente: " + (day?.source ?: report.source))
       y += 8f
-      val n = report.now
-      val level = flightLevel(n.gust10)
-      line("Veredicto: " + level.label, head)
-      line(level.advice)
-      line("Viento 10 m: %.1f m/s (%.0f km/h), viene del %s (%.0f°)".format(n.speed10, kmh(n.speed10), compass(n.dir10), n.dir10))
-      line("Ráfaga 10 m: %.1f m/s (%.0f km/h)".format(n.gust10, kmh(n.gust10)))
-      line("Viento 120 m: " + (n.speed120?.let { "%.1f m/s".format(it) } ?: "—") + "  •  Ráfaga 120 m (est.): " + (n.gust120Est?.let { "%.1f m/s".format(it) } ?: "—"))
-      line("Temperatura: " + (n.temp?.let { "%.1f °C".format(it) } ?: "—"))
-      line("Altura elegida: $altitudeM m")
-      line("En el Cañón del Sumidero la ráfaga local puede subir ~45%%: %.1f m/s.".format(n.gust10 * 1.45))
-      y += 8f
-      line("Ráfaga hora por hora (próximas 24 h):", head)
-      for (p in report.hourly.take(24)) {
-        line("  " + p.time.substringAfter("T").substringBefore(":") + ":00  viento %.1f m/s  ráfaga %.1f m/s".format(p.speed10, p.gust10))
-        if (y > 800f) break
+      if (chosen != null) {
+        val level = flightLevel(chosen.gust10, drone.limit)
+        line("Veredicto a las $hour: " + level.label, head)
+        line(level.advice)
+        line("Viento 10 m: %.1f m/s (%.0f km/h), viene del %s (%.0f°)".format(chosen.speed10, kmh(chosen.speed10), compass(chosen.dir10), chosen.dir10))
+        line("Ráfaga 10 m: %.1f m/s (%.0f km/h)".format(chosen.gust10, kmh(chosen.gust10)))
+        line("El aire se mueve hacia el %s.".format(compass((chosen.dir10 + 180) % 360)))
+        line("Viento estimado a $altitudeM m: %.1f m/s (factor logarítmico ×%.2f)".format(chosen.speed10 * factor, factor))
+        line("Ráfaga estimada a $altitudeM m: %.1f m/s".format(chosen.gust10 * factor))
+        line("En el Cañón del Sumidero la ráfaga local puede subir ~45%%: %.1f m/s.".format(chosen.gust10 * 1.45))
+        line("Temperatura a esa hora: " + (chosen.temp10?.let { "%.1f °C".format(it) } ?: "—"))
       }
       y += 8f
+      line("Tabla hora por hora:", head)
+      for (p in hourly.take(24)) {
+        line("  " + p.time.substringAfter("T").substringBefore(":") + ":00  viento %.1f m/s  ráfaga %.1f m/s  dir %s".format(p.speed10, p.gust10, compass(p.dir10)))
+        if (y > 790f) break
+      }
+      y += 8f
+      if (weekRef.size >= 4) {
+        line("Referencia rápida del archivo: en los últimos 7 días la ráfaga máxima diaria fue de %.1f a %.1f m/s, con viento dominante del %.0f° al %.0f°.".format(weekRef[0], weekRef[1], weekRef[2], weekRef[3]), head)
+        y += 8f
+      }
       line("Checklist antes de despegar: " + if (checklistOk) "COMPLETO" else "INCOMPLETO (revisa batería, regreso a casa, zona despejada y clima)", head)
       line("Generado por Geoviento Mx, GeoVisión Aérea Chiapas.")
       doc.finishPage(page)
@@ -74,5 +96,11 @@ object PdfReport {
     } catch (_: Exception) {
       null
     }
+  }
+
+  // Compatibilidad: informe rápido con los datos en vivo actuales.
+  fun generate(context: Context, report: WindReport, lat: Double, lon: Double, altitudeM: Int, checklistOk: Boolean): Uri? {
+    val hour = report.now.time?.substringAfter("T")?.substringBefore(":") ?: "08:00"
+    return generate(context, report, null, lat, lon, "Tuxtla Gutiérrez", hour, altitudeM, com.geovision.geoviento.data.DRONES[0], emptyList(), checklistOk)
   }
 }

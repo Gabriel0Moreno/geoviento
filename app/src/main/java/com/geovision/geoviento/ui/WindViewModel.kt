@@ -6,6 +6,8 @@ import com.geovision.geoviento.data.*
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.ZoneId
 
 class WindViewModel(app: Application) : AndroidViewModel(app) {
   private val repo = WindRepository()
@@ -22,6 +24,17 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
   val loading = MutableStateFlow(false)
   val diag = MutableStateFlow<List<DiagEntry>>(emptyList())
   val lastAttempt = MutableStateFlow<String?>(null)
+
+  // Dron elegido (semáforo e informe PDF). Por defecto el DJI Lito X1.
+  val drone = MutableStateFlow(DRONES[0])
+
+  // Sección del informe PDF: día consultado, su reporte y la referencia del archivo.
+  val dayReport = MutableStateFlow<DayReport?>(null)
+  val dayLoading = MutableStateFlow(false)
+  val dayError = MutableStateFlow<String?>(null)
+  // Referencia del archivo: [mín, máx de ráfaga diaria 7 días, dir mín, dir máx].
+  val weekRef = MutableStateFlow<List<Double>>(emptyList())
+  val places = MutableStateFlow<List<PlaceResult>>(emptyList())
 
   // Si algo inesperado escapa del try, termina en mensaje de error, nunca en cierre.
   private val handler = CoroutineExceptionHandler { _, e ->
@@ -56,6 +69,30 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
       loading.value = false
     }
   }
+
+  // Consulta los datos de un día para el informe PDF (hoy = pronóstico,
+  // días pasados = archivo ERA5) y la referencia de los últimos 7 días.
+  fun consultDay(lat: Double, lon: Double, date: LocalDate) {
+    viewModelScope.launch(handler) {
+      dayLoading.value = true; dayError.value = null
+      try {
+        dayReport.value = repo.dayReport(lat, lon, date)
+        weekRef.value = repo.weekReference(lat, lon)
+      } catch (e: Exception) {
+        dayError.value = "No se pudo consultar ese día (${e.message})."
+      }
+      dayLoading.value = false
+    }
+  }
+
+  fun searchPlaces(query: String) {
+    viewModelScope.launch(handler) {
+      if (query.length < 3) { places.value = emptyList(); return@launch }
+      places.value = repo.searchPlace(query)
+    }
+  }
+
+  fun today(): LocalDate = LocalDate.now(ZoneId.of("America/Mexico_City"))
 
   fun diagText(lat: Double, lon: Double): String {
     val sb = StringBuilder()
