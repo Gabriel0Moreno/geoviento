@@ -1,5 +1,13 @@
 # Changelog — GeoViento
 
+## [1.0.5] - 2026-11-11
+- EL CIERRE AL ABRIR YA TIENE CAUSA EXACTA (gracias al archivo
+  geoviento-crash.txt que guardó la v1.0.4): `UnknownFormatConversionException:
+  Conversion = ':'` en MainActivity.kt:275 — el texto del Cañón decía "~45%:"
+  dentro de un `.format(...)` y el `%` se interpretaba como inicio de un
+  formato. Corregido escapándolo como `%%` (también en el PDF, que tenía el
+  mismo texto). La hipótesis de la fábrica del ViewModel era incorrecta.
+
 ## [1.0.4] - 2026-11-11
 - La v1.0.3 se cerraba apenas al abrir (video de Gabo: logo y de regreso al
   cajón, sin llegar a la interfaz). Causa probable: el ViewModel pasó a
