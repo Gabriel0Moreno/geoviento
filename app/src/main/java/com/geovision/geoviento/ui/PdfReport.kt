@@ -42,7 +42,7 @@ object PdfReport {
       line("Viento 120 m: " + (n.speed120?.let { "%.1f m/s".format(it) } ?: "—") + "  •  Ráfaga 120 m (est.): " + (n.gust120Est?.let { "%.1f m/s".format(it) } ?: "—"))
       line("Temperatura: " + (n.temp?.let { "%.1f °C".format(it) } ?: "—"))
       line("Altura elegida: $altitudeM m")
-      line("En el Cañón del Sumidero la ráfaga local puede subir ~45%: %.1f m/s.".format(n.gust10 * 1.45))
+      line("En el Cañón del Sumidero la ráfaga local puede subir ~45%%: %.1f m/s.".format(n.gust10 * 1.45))
       y += 8f
       line("Ráfaga hora por hora (próximas 24 h):", head)
       for (p in report.hourly.take(24)) {

@@ -272,7 +272,7 @@ class MainActivity : ComponentActivity() {
           // 6) Cómo se mueve el aire hoy sobre el relieve — como en la demo.
           Text("Cómo se mueve el aire hoy sobre el relieve", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
           Spacer(Modifier.height(4.dp))
-          Text("En el Cañón del Sumidero el viento se canaliza entre las paredes y la ráfaga local puede subir ~45%: %.1f m/s.".format(n.gust10 * 1.45))
+          Text("En el Cañón del Sumidero el viento se canaliza entre las paredes y la ráfaga local puede subir ~45%%: %.1f m/s.".format(n.gust10 * 1.45))
           Text("En Copoya el aire sube por la ladera y puede empujar el dron hacia arriba. En Chiapa de Corzo la brisa del río cambia la dirección por la tarde.")
           Spacer(Modifier.height(12.dp))
 
