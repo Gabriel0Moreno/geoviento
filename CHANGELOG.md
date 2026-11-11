@@ -1,5 +1,35 @@
 # Changelog — GeoViento
 
+## [1.1.0] - 2026-11-11
+- LA INTERFAZ COMPLETA DE LA DEMO, CON TODAS SUS FUNCIONALIDADES, EN LA APP
+  (a pedido de Gabo, con el video de la demo como referencia):
+  - Condiciones en superficie: humedad, presión, probabilidad de lluvia, UV,
+    amanecer/atardecer y calidad del aire (nueva API Open-Meteo Air Quality),
+    más la tarjeta "Ojo con la tarde" y la leyenda del semáforo.
+  - Gráfica de líneas hora por hora (ráfaga en rojo, sostenido en verde, con
+    banda amarilla y zona roja) y tarjetas de ventanas del día (buena,
+    transición, evita volar, se calma), calculadas con los datos en vivo.
+  - MAPA REAL con baldosas (MapLibre, demotiles OSM) y flechas de corriente
+    animadas, selector de hora, intensidad del flujo y las 5 zonas numeradas
+    con sus tarjetas (Centro, Real del Bosque, Cañón del Sumidero, Copoya,
+    Chiapa de Corzo). Si el mapa no carga, se usa el esquema de antes.
+  - Diagrama de relieve (corte del valle: Cañón → Valle → Meseta de Copoya)
+    con las 3 explicaciones.
+  - Calculadora por altura con selector de hora y perfil logarítmico de la
+    demo (×1.67 a 105 m), y checklist previo al vuelo con textos calculados
+    con los datos de hoy.
+  - Informe PDF completo: buscar lugar por nombre (geocodificación),
+    latitud/longitud, usar mi ubicación, día (hoy o días pasados con archivo
+    ERA5), hora del vuelo, altura planeada y selector de dron (Lito X1 10.7,
+    ligera ampliada 12, media 15 m/s); botón "Consultar datos del día" y
+    referencia del archivo de 7 días. El semáforo ahora sigue el límite del
+    dron elegido (verde < 75%, amarillo 75-100%, rojo >= límite).
+  - Preferencia de fuente: se esperan las dos fuentes y se usa Open-Meteo
+    cuando responde (trae viento a 80/120 m); met.no solo si Open-Meteo falla.
+    La ventana de 24 h ahora empieza en la hora actual, no a medianoche.
+  - Corrección menor: la mejor ventana ya no dice "23:00–22:00" cuando todo
+    el día está en verde; ahora dice "Todo el día en verde".
+
 ## [1.0.5] - 2026-11-11
 - EL CIERRE AL ABRIR YA TIENE CAUSA EXACTA (gracias al archivo
   geoviento-crash.txt que guardó la v1.0.4): `UnknownFormatConversionException:

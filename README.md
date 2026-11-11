@@ -4,17 +4,23 @@ Nombre de la app: **Geoviento Mx**. Icono: logo oficial de GeoVisión Aérea Chi
 
 App para Gabo / GeoVisión Aérea Chiapas. Antes de volar, muestra viento y ráfagas en tu ubicación, en el mapa con relieve, y un semáforo de vuelo para dron sub-250 g.
 
+## v1.1.0 (2026-11-11): la interfaz completa de la demo, con todas sus funcionalidades
+Condiciones en superficie (humedad, presión, lluvia, UV, amanecer/atardecer, calidad del aire), gráfica de líneas hora por hora, tarjetas de ventanas del día, mapa REAL con baldosas MapLibre y flechas animadas + 5 zonas numeradas, diagrama de relieve, calculadora por altura con perfil logarítmico, checklist con datos del día, e informe PDF completo (buscar lugar, día de hoy o pasado con archivo ERA5, hora, altura y selector de dron). El semáforo sigue el límite del dron elegido.
+
 ## Datos reales (verificado 2026-11-11)
 - **Principal: Open-Meteo Forecast API, gratis y sin API key.** Da viento a 10 m, 80 m y 120 m (altura de dron) y ráfagas SOLO a 10 m, pronóstico por hora 3 días. OJO: Open-Meteo NO tiene `wind_gusts_80m` ni `wind_gusts_120m` (pedirlos da HTTP 400, bug corregido en v1.0.1); la ráfaga a 120 m se estima como gust10 * (speed120 / speed10).
   `https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m&wind_speed_unit=ms&forecast_days=3&timezone=America/Mexico_City`
 - **Respaldo: api.met.no locationforecast 2.0** (gratis, sin key, solo viento medio, sin ráfagas; la app lo consulta de verdad si Open-Meteo falla, y estima la ráfaga como viento * 1.4). Verificado en vivo en Tuxtla (16.75, -93.11, 534 m): 22.5 °C, viento 2.5 m/s desde 346°.
-- **Mapa y relieve: MapLibre GL Android + OpenStreetMap + raster-dem** (hillshade y terreno 3D). Sin key de Google.
-- **Corrientes:** el mapa anima partículas interpoladas de una rejilla 5x5 de puntos Open-Meteo alrededor de tu ubicación. Es interpolación de pronóstico por modelo, no medición con anemómetro. No inventa sensores.
+- **Mapa y relieve: MapLibre GL Android 10.2.0 + demotiles (OSM).** Mapa real con baldosas, flechas de corriente animadas según la dirección y la ráfaga de la hora elegida, y las 5 zonas numeradas (Centro, Real del Bosque, Cañón del Sumidero, Copoya, Chiapa de Corzo). Si el mapa no carga, se muestra el esquema Canvas de antes. Sin key de Google.
+- **Corrientes:** rejilla de flechas animadas sobre el mapa real (dirección del pronóstico, color según el semáforo). Es interpolación de pronóstico por modelo, no medición con anemómetro. No inventa sensores.
+- **Calidad del aire: Open-Meteo Air Quality API** (gratis, sin key): AQI de EE. UU. y PM2.5.
+- **Días pasados y lugares: Open-Meteo Archive API (ERA5)** para el informe PDF de días anteriores, y **Open-Meteo Geocoding API** para buscar lugares por nombre. Todo gratis y sin key.
 
-## Semáforo (dron <249 g, límite tipo Mini 4 Pro 10.7 m/s)
-- VERDE: ráfaga < 8 m/s — cómodo para volar.
-- AMARILLO: 8 a 10.7 m/s — precaución, vuela bajo y cerca, vigila batería.
-- ROJO: >= 10.7 m/s — no volar. Manda la ráfaga, no el viento medio.
+## Semáforo (según el dron elegido; por defecto DJI Lito X1 <249 g, límite 10.7 m/s)
+- VERDE: ráfaga < 75% del límite (Lito X1: < 8 m/s) — cómodo para volar.
+- AMARILLO: 75% a 100% del límite (Lito X1: 8 a 10.7 m/s) — precaución, vuela bajo y cerca, vigila batería.
+- ROJO: >= límite (Lito X1: >= 10.7 m/s) — no volar. Manda la ráfaga, no el viento medio.
+- Otros drones en la app: clase ligera ampliada (12 m/s) y clase media (15 m/s); el semáforo y el informe PDF usan el límite elegido.
 - Actualización: GPS + refresco cada 15 min + botón Actualizar.
 
 ## Cómo compilar el APK
