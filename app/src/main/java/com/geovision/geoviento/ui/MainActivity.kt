@@ -3,9 +3,12 @@ package com.geovision.geoviento.ui
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.provider.MediaStore
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -24,6 +27,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
 import com.geovision.geoviento.data.HourlyPoint
@@ -39,13 +44,36 @@ class MainActivity : ComponentActivity() {
   // Tuxtla por defecto si aún no hay GPS: 16.75, -93.11
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // Si la app se vuelve a cerrar, el error exacto queda guardado en
+    // Descargas/geoviento-crash.txt para poder diagnosticarlo sin computadora.
+    val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+    Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+      try {
+        val text = "Geoviento crash\n" + Log.getStackTraceString(e)
+        val values = ContentValues().apply {
+          put(MediaStore.Downloads.DISPLAY_NAME, "geoviento-crash.txt")
+          put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+        }
+        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+        uri?.let { contentResolver.openOutputStream(it)?.use { os -> os.write(text.toByteArray()) } }
+      } catch (_: Exception) { /* si no se puede guardar, el cierre sigue su curso */ }
+      previousHandler?.uncaughtException(thread, e)
+    }
     val fused = LocationServices.getFusedLocationProviderClient(this)
     var onPermission: ((Boolean) -> Unit)? = null
     val perm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
       onPermission?.invoke(granted)
     }
     setContent {
-      val vm: WindViewModel = viewModel()
+      // Fábrica explícita: el ViewModel necesita la Application y la fábrica
+      // por defecto no siempre lo crea bien; sin esto la app se cerraba
+      // apenas al abrir (pantalla del logo y de regreso al cajón).
+      val vm: WindViewModel = viewModel(factory = object : ViewModelProvider.Factory {
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+          @Suppress("UNCHECKED_CAST")
+          return WindViewModel(application) as T
+        }
+      })
       val rep by vm.report.collectAsState()
       val origin by vm.origin.collectAsState()
       val err by vm.error.collectAsState()
