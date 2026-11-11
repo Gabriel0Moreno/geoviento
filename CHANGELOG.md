@@ -15,6 +15,9 @@
   automática real cada 15 min. El mapa con baldosas MapLibre en vivo queda pendiente.
 - Se quitó la frase falsa "Se actualiza solo cada 15 min" de la v1.0.0: ahora sí se
   actualiza solo cada 15 min.
+- Corrección posterior a la primera subida (mismo 1.0.1): faltaba el import
+  `androidx.compose.ui.graphics.drawscope.drawIntoCanvas` en MapScreen.kt y
+  Actions fallaba con "Unresolved reference 'drawIntoCanvas'"; ya agregado.
 
 ## [1.0.0] - 2026-11-11
 - Nombre de la app: Geoviento Mx. Icono de la APK: logo oficial de GeoVisión, sin redibujar.
