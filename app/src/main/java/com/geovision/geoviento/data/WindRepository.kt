@@ -2,13 +2,15 @@ package com.geovision.geoviento.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 
 /** Estima la ráfaga a una altura a partir de la ráfaga a 10 m. */
@@ -28,10 +30,13 @@ class WindRepository {
     .readTimeout(15, TimeUnit.SECONDS)
     .writeTimeout(15, TimeUnit.SECONDS)
     .build()
-  private val api = Retrofit.Builder().baseUrl("https://api.open-meteo.com/")
-    .client(http).addConverterFactory(GsonConverterFactory.create()).build().create(OpenMeteoApi::class.java)
-  private val metNo = Retrofit.Builder().baseUrl("https://api.met.no/")
-    .client(http).addConverterFactory(GsonConverterFactory.create()).build().create(MetNoApi::class.java)
+  private fun retrofit(base: String) = Retrofit.Builder().baseUrl(base)
+    .client(http).addConverterFactory(GsonConverterFactory.create()).build()
+  private val api = retrofit("https://api.open-meteo.com/").create(OpenMeteoApi::class.java)
+  private val archiveApi = retrofit("https://archive-api.open-meteo.com/").create(OpenMeteoArchiveApi::class.java)
+  private val airApi = retrofit("https://air-quality-api.open-meteo.com/").create(AirQualityApi::class.java)
+  private val geoApi = retrofit("https://geocoding-api.open-meteo.com/").create(GeocodingApi::class.java)
+  private val metNo = retrofit("https://api.met.no/").create(MetNoApi::class.java)
 
   // Diagnóstico de la última carga / prueba, para mostrarlo en la app.
   private val diagLock = Any()
@@ -40,21 +45,11 @@ class WindRepository {
   private fun addDiag(e: DiagEntry) = synchronized(diagLock) { _diag.add(e) }
   private fun clearDiag() = synchronized(diagLock) { _diag.clear() }
 
-  // Rejilla 5x5 para las corrientes del mapa: puntos cada 0.05° alrededor de tu ubicación.
-  suspend fun grid(lat: Double, lon: Double): List<Triple<Double, Double, Pair<Double, Double>>> {
-    val out = mutableListOf<Triple<Double, Double, Pair<Double, Double>>>()
-    for (di in -2..2) for (dj in -2..2) {
-      val la = lat + di * 0.05; val lo = lon + dj * 0.05
-      try {
-        val r = api.forecast(la, lo); val c = r.current ?: continue
-        out.add(Triple(la, lo, Pair(safe(c.wind_speed_10m), safe(c.wind_direction_10m))))
-      } catch (e: Exception) { /* punto sin datos: se salta, el mapa interpola el resto */ }
-    }
-    return out
-  }
-
-  // Open-Meteo y met.no se prueban EN PARALELO y gana la primera que responde
-  // bien. Toda la red corre en Dispatchers.IO, nunca en el hilo principal.
+  // Open-Meteo (principal, datos completos) y met.no (respaldo) se prueban EN
+  // PARALELO y se espera a los dos: si Open-Meteo responde se usa él (trae
+  // viento a 80/120 m y ráfagas medidas); solo si falla se usa met.no.
+  // La calidad del aire se pide en paralelo y se anexa si responde.
+  // Toda la red corre en Dispatchers.IO, nunca en el hilo principal.
   suspend fun now(lat: Double, lon: Double): WindReport = withContext(Dispatchers.IO) {
     clearDiag()
     coroutineScope {
@@ -74,24 +69,22 @@ class WindRepository {
           .onFailure { addDiag(DiagEntry("met.no", false, it.message ?: "error sin mensaje", ms)) }
         r
       }
-      // Gana el primer resultado que llegue; si falla, se espera al otro.
-      val first: Result<WindReport> = select {
-        omD.onAwait { it }
-        metD.onAwait { it }
+      val aqD = async {
+        runCatching {
+          val a = airApi.airQuality(lat, lon).current
+          AirQualityNow(a?.us_aqi, a?.pm2_5)
+        }.getOrNull()
       }
-      if (first.isSuccess) {
-        omD.cancel(); metD.cancel()
-        return@coroutineScope first.getOrThrow()
-      }
-      val second = select<Result<WindReport>> {
-        omD.onAwait { it }
-        metD.onAwait { it }
-      }
-      if (second.isSuccess) return@coroutineScope second.getOrThrow()
-      throw IllegalStateException(
-        "Open-Meteo falló (${first.exceptionOrNull()?.message}); " +
-          "el respaldo met.no tampoco respondió (${second.exceptionOrNull()?.message})"
-      )
+      val om = omD.await()
+      val met = metD.await()
+      val air = aqD.await()
+      val base = if (om.isSuccess) om.getOrThrow()
+        else if (met.isSuccess) met.getOrThrow()
+        else throw IllegalStateException(
+          "Open-Meteo falló (${om.exceptionOrNull()?.message}); " +
+            "el respaldo met.no tampoco respondió (${met.exceptionOrNull()?.message})"
+        )
+      base.copy(air = air)
     }
   }
 
@@ -100,7 +93,7 @@ class WindRepository {
   suspend fun testConnection(lat: Double, lon: Double): List<DiagEntry> = withContext(Dispatchers.IO) {
     val out = mutableListOf<DiagEntry>()
     out.add(probe("Open-Meteo", "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m&wind_speed_unit=ms", null))
-    out.add(probe("met.no", "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=$lat&lon=$lon", "GeovientoMx/1.0.3 (github.com/Gabriel0Moreno/geoviento)"))
+    out.add(probe("met.no", "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=$lat&lon=$lon", "GeovientoMx/1.1.0 (github.com/Gabriel0Moreno/geoviento)"))
     out
   }
 
@@ -122,27 +115,104 @@ class WindRepository {
     }
   }
 
+  // Informe de un día: hoy con el pronóstico, días pasados con el archivo ERA5.
+  suspend fun dayReport(lat: Double, lon: Double, date: LocalDate): DayReport = withContext(Dispatchers.IO) {
+    val today = LocalDate.now(ZoneId.of("America/Mexico_City"))
+    val fmt = DateTimeFormatter.ISO_LOCAL_DATE
+    if (date == today) {
+      val r = api.forecast(lat, lon)
+      val h = r.hourly
+      val times = h?.time ?: emptyList()
+      val dayStr = date.format(fmt)
+      val idx = times.indices.filter { times[it].startsWith(dayStr) }
+      val hourly = if (h != null) idx.map { buildHourly(h, it) } else emptyList()
+      val max = hourly.maxByOrNull { it.gust10 }
+      DayReport(dayStr, hourly, max?.gust10 ?: 0.0, max?.time, hourly.firstOrNull()?.dir10, "Open-Meteo (pronóstico)")
+    } else {
+      val ds = date.format(fmt)
+      val a = archiveApi.archive(lat, lon, ds, ds)
+      val h = a.hourly
+      val times = h?.time ?: emptyList()
+      val hourly = if (h != null) times.indices.map { buildArchiveHourly(h, it) } else emptyList()
+      val max = hourly.maxByOrNull { it.gust10 }
+      val dom = a.daily?.wind_direction_10m_dominant?.firstOrNull()
+      DayReport(ds, hourly, max?.gust10 ?: 0.0, max?.time, dom, "Open-Meteo (archivo ERA5)")
+    }
+  }
+
+  // Referencia rápida del archivo: ráfaga máxima diaria de los últimos 7 días
+  // (mín, máx y rango de dirección dominante). Devuelve (min, max, dirMin, dirMax).
+  suspend fun weekReference(lat: Double, lon: Double): List<Double> = withContext(Dispatchers.IO) {
+    val today = LocalDate.now(ZoneId.of("America/Mexico_City"))
+    val fmt = DateTimeFormatter.ISO_LOCAL_DATE
+    val end = today.minusDays(1).format(fmt)
+    val start = today.minusDays(7).format(fmt)
+    return@withContext try {
+      val a = archiveApi.archive(lat, lon, start, end)
+      val gusts = a.daily?.wind_gusts_10m_max?.filterNotNull() ?: emptyList()
+      val dirs = a.daily?.wind_direction_10m_dominant?.filterNotNull() ?: emptyList()
+      if (gusts.isEmpty()) emptyList()
+      else listOf(gusts.min(), gusts.max(), dirs.minOrNull() ?: 0.0, dirs.maxOrNull() ?: 0.0)
+    } catch (_: Exception) {
+      emptyList()
+    }
+  }
+
+  // Buscar un lugar por nombre (geocodificación Open-Meteo).
+  suspend fun searchPlace(query: String): List<PlaceResult> = withContext(Dispatchers.IO) {
+    try {
+      val res = geoApi.search(query).results ?: emptyList()
+      res.mapNotNull {
+        val la = it.latitude ?: return@mapNotNull null
+        val lo = it.longitude ?: return@mapNotNull null
+        val detail = listOfNotNull(it.admin1, it.country).joinToString(", ")
+        PlaceResult(it.name ?: "Lugar", detail, la, lo)
+      }
+    } catch (_: Exception) {
+      emptyList()
+    }
+  }
+
+  private fun buildHourly(h: OmHourly, i: Int): HourlyPoint {
+    val times = h.time ?: emptyList()
+    val s120 = h.wind_speed_120m?.getOrNull(i)
+    val sp10 = safe(h.wind_speed_10m?.getOrNull(i))
+    val gu10 = safe(h.wind_gusts_10m?.getOrNull(i))
+    return HourlyPoint(times.getOrNull(i) ?: "", sp10, gu10, s120, estimateGust(gu10, sp10, s120), safe(h.wind_direction_10m?.getOrNull(i)), h.temperature_2m?.getOrNull(i), h.precipitation_probability?.getOrNull(i))
+  }
+
+  private fun buildArchiveHourly(h: OmArchiveHourly, i: Int): HourlyPoint {
+    val times = h.time ?: emptyList()
+    val sp10 = safe(h.wind_speed_10m?.getOrNull(i))
+    val gu10 = safe(h.wind_gusts_10m?.getOrNull(i))
+    return HourlyPoint(times.getOrNull(i) ?: "", sp10, gu10, null, null, safe(h.wind_direction_10m?.getOrNull(i)), h.temperature_2m?.getOrNull(i), null)
+  }
+
   private suspend fun openMeteoNow(lat: Double, lon: Double): WindReport {
     val r = api.forecast(lat, lon)
     val c = r.current ?: throw IllegalStateException("Open-Meteo sin datos actuales")
     val h = r.hourly
-    // Las listas horarias se combinan solo hasta el índice mínimo común:
-    // si alguna llega más corta o en null, no se indexa fuera de rango.
-    val hourly = if (h != null) {
-      val times = h.time ?: emptyList()
-      val n = minOf(times.size, h.wind_speed_10m?.size ?: 0, h.wind_gusts_10m?.size ?: 0)
-      (0 until minOf(n, 24)).map {
-        val s120 = h.wind_speed_120m?.getOrNull(it)
-        val sp10 = safe(h.wind_speed_10m?.getOrNull(it))
-        val gu10 = safe(h.wind_gusts_10m?.getOrNull(it))
-        HourlyPoint(times[it], sp10, gu10, s120, estimateGust(gu10, sp10, s120), safe(h.wind_direction_10m?.getOrNull(it)))
-      }
-    } else emptyList()
+    val d = r.daily
+    // La ventana de 24 h empieza en la hora actual, no a medianoche.
+    val times = h?.time ?: emptyList()
+    val nowStr = c.time ?: ""
+    val startIdx = times.indexOfFirst { it >= nowStr }.takeIf { it >= 0 } ?: 0
+    val n = minOf(times.size, h?.wind_speed_10m?.size ?: 0, h?.wind_gusts_10m?.size ?: 0)
+    val hourly = (startIdx until minOf(n, startIdx + 24)).map { buildHourly(h!!, it) }
     val speed10 = safe(c.wind_speed_10m)
     val gust10 = safe(c.wind_gusts_10m)
+    val gustMaxToday = d?.wind_gusts_10m_max?.firstOrNull()
+    val gustMaxHour = hourly.maxByOrNull { it.gust10 }?.time
+    val precipNow = h?.precipitation_probability?.getOrNull(startIdx)
+    val surface = SurfaceNow(
+      c.relative_humidity_2m, c.surface_pressure, c.uv_index,
+      d?.sunrise?.firstOrNull(), d?.sunset?.firstOrNull(),
+      d?.temperature_2m_max?.firstOrNull(), gustMaxToday, gustMaxHour,
+      precipNow, r.elevation
+    )
     return WindReport(
       WindNow(speed10, safe(c.wind_direction_10m), gust10, c.wind_speed_80m, c.wind_direction_80m, c.wind_speed_120m, c.wind_direction_120m, estimateGust(gust10, speed10, c.wind_speed_120m), c.temperature_2m, c.time),
-      hourly, "Open-Meteo", lat, lon
+      hourly, "Open-Meteo", lat, lon, surface = surface
     )
   }
 
