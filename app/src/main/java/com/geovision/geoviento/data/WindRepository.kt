@@ -1,9 +1,14 @@
 package com.geovision.geoviento.data
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.select.select
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.TimeUnit
 
 /** Estima la ráfaga a una altura a partir de la ráfaga a 10 m. */
@@ -28,6 +33,13 @@ class WindRepository {
   private val metNo = Retrofit.Builder().baseUrl("https://api.met.no/")
     .client(http).addConverterFactory(GsonConverterFactory.create()).build().create(MetNoApi::class.java)
 
+  // Diagnóstico de la última carga / prueba, para mostrarlo en la app.
+  private val diagLock = Any()
+  private val _diag = mutableListOf<DiagEntry>()
+  val diag: List<DiagEntry> get() = synchronized(diagLock) { _diag.toList() }
+  private fun addDiag(e: DiagEntry) = synchronized(diagLock) { _diag.add(e) }
+  private fun clearDiag() = synchronized(diagLock) { _diag.clear() }
+
   // Rejilla 5x5 para las corrientes del mapa: puntos cada 0.05° alrededor de tu ubicación.
   suspend fun grid(lat: Double, lon: Double): List<Triple<Double, Double, Pair<Double, Double>>> {
     val out = mutableListOf<Triple<Double, Double, Pair<Double, Double>>>()
@@ -41,17 +53,72 @@ class WindRepository {
     return out
   }
 
-  // Toda la red corre en Dispatchers.IO, nunca en el hilo principal.
+  // Open-Meteo y met.no se prueban EN PARALELO y gana la primera que responde
+  // bien. Toda la red corre en Dispatchers.IO, nunca en el hilo principal.
   suspend fun now(lat: Double, lon: Double): WindReport = withContext(Dispatchers.IO) {
-    try {
-      openMeteoNow(lat, lon)
-    } catch (e: Exception) {
-      // Respaldo real con met.no antes de mostrar error.
-      try {
-        metNoNow(lat, lon)
-      } catch (e2: Exception) {
-        throw IllegalStateException("Open-Meteo falló (${e.message}); el respaldo met.no tampoco respondió (${e2.message})")
+    clearDiag()
+    coroutineScope {
+      val omD = async {
+        val t0 = System.currentTimeMillis()
+        val r = runCatching { openMeteoNow(lat, lon) }
+        val ms = System.currentTimeMillis() - t0
+        r.onSuccess { addDiag(DiagEntry("Open-Meteo", true, "respondió bien", ms)) }
+          .onFailure { addDiag(DiagEntry("Open-Meteo", false, it.message ?: "error sin mensaje", ms)) }
+        r
       }
+      val metD = async {
+        val t0 = System.currentTimeMillis()
+        val r = runCatching { metNoNow(lat, lon) }
+        val ms = System.currentTimeMillis() - t0
+        r.onSuccess { addDiag(DiagEntry("met.no", true, "respondió bien (respaldo)", ms)) }
+          .onFailure { addDiag(DiagEntry("met.no", false, it.message ?: "error sin mensaje", ms)) }
+        r
+      }
+      // Gana el primer resultado que llegue; si falla, se espera al otro.
+      val first: Result<WindReport> = select {
+        omD.onAwait { it }
+        metD.onAwait { it }
+      }
+      if (first.isSuccess) {
+        omD.cancel(); metD.cancel()
+        return@coroutineScope first.getOrThrow()
+      }
+      val second = select<Result<WindReport>> {
+        omD.onAwait { it }
+        metD.onAwait { it }
+      }
+      if (second.isSuccess) return@coroutineScope second.getOrThrow()
+      throw IllegalStateException(
+        "Open-Meteo falló (${first.exceptionOrNull()?.message}); " +
+          "el respaldo met.no tampoco respondió (${second.exceptionOrNull()?.message})"
+      )
+    }
+  }
+
+  // Prueba directa de conexión a las dos fuentes (sin Retrofit), para el
+  // botón "Probar conexión" del diagnóstico.
+  suspend fun testConnection(lat: Double, lon: Double): List<DiagEntry> = withContext(Dispatchers.IO) {
+    val out = mutableListOf<DiagEntry>()
+    out.add(probe("Open-Meteo", "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m&wind_speed_unit=ms", null))
+    out.add(probe("met.no", "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=$lat&lon=$lon", "GeovientoMx/1.0.3 (github.com/Gabriel0Moreno/geoviento)"))
+    out
+  }
+
+  private fun probe(source: String, urlStr: String, userAgent: String?): DiagEntry {
+    val t0 = System.currentTimeMillis()
+    return try {
+      val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 10_000; readTimeout = 10_000
+        requestMethod = "GET"
+        if (userAgent != null) setRequestProperty("User-Agent", userAgent)
+      }
+      val code = conn.responseCode
+      conn.disconnect()
+      val ms = System.currentTimeMillis() - t0
+      if (code in 200..299) DiagEntry(source, true, "HTTP $code", ms)
+      else DiagEntry(source, false, "HTTP $code", ms)
+    } catch (e: Exception) {
+      DiagEntry(source, false, e.javaClass.simpleName + ": " + (e.message ?: "sin mensaje"), System.currentTimeMillis() - t0)
     }
   }
 
