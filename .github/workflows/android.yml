@@ -22,6 +22,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.7'
+          # Caché desactivado: el servicio de caché de GitHub estuvo caído
+          # el 11 nov 2026 y tumbaba todas las compilaciones ("Cache service
+          # responded with 400"). Sin caché, Gradle se descarga fresco cada vez.
+          cache-disabled: true
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
       - name: Upload APK
@@ -48,6 +52,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.7'
+          cache-disabled: true
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
       - name: Create GitHub Release with APK
