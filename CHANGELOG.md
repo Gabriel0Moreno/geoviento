@@ -1,5 +1,23 @@
 # Changelog — GeoViento
 
+## [1.0.2] - 2026-11-11
+- La v1.0.1 abría pero se quedaba en "Cargando viento en vivo…" y se cerraba sin
+  mostrar datos ni error. Blindaje defensivo: red en Dispatchers.IO con timeout
+  de 15 s (un cuelgue de red ahora termina en mensaje de error con Reintentar),
+  listas horarias combinadas solo hasta el índice mínimo común (sin indexar
+  fuera de rango), permiso de ubicación después del primer frame, un solo ciclo
+  de actualización cada 15 min, CoroutineExceptionHandler en el ViewModel y
+  sin `!!` en la interfaz.
+- Visualización final de la demo web, ahora con datos en vivo: selector de hora
+  para las corrientes (Ahora + próximas 24 h), botones Corrientes visibles y
+  Pausar/Reanudar animación, deslizador de intensidad del flujo, zonas del mapa
+  táctiles con su nota, sección "Cómo se mueve el aire hoy sobre el relieve",
+  calculadora de viento por altura (deslizador 10–120 m), checklist interactivo
+  "Antes de despegar hoy", mejor ventana de vuelo calculada de las ráfagas, e
+  informe técnico de vuelo en PDF generado en el teléfono (se guarda en
+  Descargas). IMPORTANTE: desinstalar la versión anterior antes de instalar
+  esta APK, porque cada build de Actions la firma con una clave distinta.
+
 ## [1.0.1] - 2026-11-11
 - CORREGIDO el error HTTP 400 de Open-Meteo: la API no tiene ráfagas a 80 ni a 120 m
   (wind_gusts_80m / wind_gusts_120m no existen). Se quitaron de la llamada; la ráfaga
