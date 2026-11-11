@@ -1,5 +1,13 @@
 # Changelog — GeoViento
 
+## [1.0.4] - 2026-11-11
+- La v1.0.3 se cerraba apenas al abrir (video de Gabo: logo y de regreso al
+  cajón, sin llegar a la interfaz). Causa probable: el ViewModel pasó a
+  AndroidViewModel y la fábrica por defecto no lo creaba. Ahora MainActivity
+  lo crea con una fábrica explícita. Además, si la app se vuelve a cerrar, el
+  error exacto queda guardado en Descargas/geoviento-crash.txt para poder
+  diagnosticarlo sin computadora.
+
 ## [1.0.3] - 2026-11-11
 - La v1.0.2 seguía atorada en "Cargando…" sin mostrar nada: TODA la interfaz
   estaba detrás de la carga de datos. Ahora la interfaz SIEMPRE se ve: al abrir
