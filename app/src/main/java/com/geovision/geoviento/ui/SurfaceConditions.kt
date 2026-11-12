@@ -75,6 +75,11 @@ fun SurfaceConditions(report: WindReport, limit: Double) {
     FlightLevel.YELLOW -> Color(0xFF8A6D00)
     FlightLevel.RED -> Color(0xFFB3261E)
   }
+  val levelName = when (level) {
+    FlightLevel.GREEN -> "VERDE"
+    FlightLevel.YELLOW -> "AMARILLO"
+    FlightLevel.RED -> "ROJO"
+  }
   val afternoonDir = report.hourly.firstOrNull {
     (it.time.substringAfter("T").substringBefore(":").toIntOrNull() ?: 0) >= 15
   }?.dir10
@@ -102,7 +107,7 @@ fun SurfaceConditions(report: WindReport, limit: Double) {
   Spacer(Modifier.height(8.dp))
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     SurfaceTile("DIRECCIÓN", "${compass(n.dir10)} ${n.dir10.toInt()}°", afternoonDir?.let { "Por la tarde gira a ${compass(it)} (${it.toInt()}°)" } ?: "—", Modifier.weight(1f))
-    SurfaceTile("SEMÁFORO AHORA", level.name, "%.1f m/s está %s del límite".format(n.gust10, if (level == FlightLevel.GREEN) "muy debajo" else "cerca"), Modifier.weight(1f), levelColor)
+    SurfaceTile("SEMÁFORO AHORA", levelName, "%.1f m/s está %s del límite".format(n.gust10, if (level == FlightLevel.GREEN) "muy debajo" else "cerca"), Modifier.weight(1f), levelColor)
   }
   Spacer(Modifier.height(8.dp))
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
