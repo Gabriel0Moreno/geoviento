@@ -1,7 +1,7 @@
 plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id("org.jetbrains.kotlin.plugin.compose") }
 android {
   namespace = "com.geovision.geoviento"; compileSdk = 34
-  defaultConfig { applicationId = "com.geovision.geoviento"; minSdk = 26; targetSdk = 34; versionCode = 11; versionName = "1.1.4" }
+  defaultConfig { applicationId = "com.geovision.geoviento"; minSdk = 26; targetSdk = 34; versionCode = 12; versionName = "1.1.5" }
   buildFeatures { compose = true }
   compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
   kotlinOptions { jvmTarget = "17" }
@@ -14,5 +14,4 @@ dependencies {
   implementation("com.google.android.gms:play-services-location:21.3.0")
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
   implementation("com.squareup.retrofit2:retrofit:2.11.0"); implementation("com.squareup.retrofit2:converter-gson:2.11.0")
-  implementation("org.maplibre.gl:android-sdk:10.2.0")
 }
