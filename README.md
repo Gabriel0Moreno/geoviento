@@ -11,7 +11,7 @@ Condiciones en superficie (humedad, presión, lluvia, UV, amanecer/atardecer, ca
 - **Principal: Open-Meteo Forecast API, gratis y sin API key.** Da viento a 10 m, 80 m y 120 m (altura de dron) y ráfagas SOLO a 10 m, pronóstico por hora 3 días. OJO: Open-Meteo NO tiene `wind_gusts_80m` ni `wind_gusts_120m` (pedirlos da HTTP 400, bug corregido en v1.0.1); la ráfaga a 120 m se estima como gust10 * (speed120 / speed10).
   `https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m&wind_speed_unit=ms&forecast_days=3&timezone=America/Mexico_City`
 - **Respaldo: api.met.no locationforecast 2.0** (gratis, sin key, solo viento medio, sin ráfagas; la app lo consulta de verdad si Open-Meteo falla, y estima la ráfaga como viento * 1.4). Verificado en vivo en Tuxtla (16.75, -93.11, 534 m): 22.5 °C, viento 2.5 m/s desde 346°.
-- **Mapa y relieve: WebView con Leaflet + baldosas OpenStreetMap.** Mapa real con calles, flechas de corriente animadas según la dirección y la ráfaga de la hora elegida, y las 5 zonas numeradas (Centro, Real del Bosque, Cañón del Sumidero, Copoya, Chiapa de Corzo). Si el mapa no carga, se muestra el esquema Canvas de antes. Sin key de Google. (Antes: MapLibre nativo, eliminado en la 1.1.5 porque tumbaba la app al cargarlo con un fallo nativo sin archivo de error.)
+- **Mapa y relieve: WebView con Leaflet + baldosas OpenStreetMap, doble CDN (unpkg y jsdelivr).** Mapa real con calles, flechas de corriente animadas según la dirección y la ráfaga de la hora elegida, y las 5 zonas numeradas (Centro, Real del Bosque, Cañón del Sumidero, Copoya, Chiapa de Corzo). Si Leaflet no carga en 8 s o el WebView falla, se muestra el esquema Canvas de antes. Sin key de Google. (Antes: MapLibre nativo, eliminado en la 1.1.5 porque tumbaba la app al cargarlo con un fallo nativo sin archivo de error.)
 - **Corrientes:** rejilla de flechas animadas sobre el mapa real (dirección del pronóstico, color según el semáforo). Es interpolación de pronóstico por modelo, no medición con anemómetro. No inventa sensores.
 - **Calidad del aire: Open-Meteo Air Quality API** (gratis, sin key): AQI de EE. UU. y PM2.5.
 - **Días pasados y lugares: Open-Meteo Archive API (ERA5)** para el informe PDF de días anteriores, y **Open-Meteo Geocoding API** para buscar lugares por nombre. Todo gratis y sin key.
@@ -20,7 +20,9 @@ Condiciones en superficie (humedad, presión, lluvia, UV, amanecer/atardecer, ca
 - VERDE: ráfaga < 75% del límite (Lito X1: < 8 m/s) — cómodo para volar.
 - AMARILLO: 75% a 100% del límite (Lito X1: 8 a 10.7 m/s) — precaución, vuela bajo y cerca, vigila batería.
 - ROJO: >= límite (Lito X1: >= 10.7 m/s) — no volar. Manda la ráfaga, no el viento medio.
-- Otros drones en la app: clase ligera ampliada (12 m/s) y clase media (15 m/s); el semáforo y el informe PDF usan el límite elegido.
+- Otros drones en la app: lista completa de DJI con su límite publicado (Neo 8, Mini SE 8.5, Mavic Mini 8, Mini 2 SE / Mini 2 / Mini 3 / Mini 3 Pro / Mini 4 Pro / Mini 4K / Flip 10.7, Air 2S / Mavic Air 2 10.7, Air 3 / Air 3S 12, Mavic 2 Pro/Zoom 10, Mavic 3 / Classic / Pro / Enterprise 12, Avata / Avata 2 10.7, FPV 13.5, Phantom 4 Pro 10, Inspire 2 10, Inspire 3 14, Matrice 30/30T 15, Matrice 300 RTK 15, Matrice 350 RTK 12, Matrice 4T/4E 12); el semáforo y el informe PDF usan el límite elegido.
+- Ubicación principal cambiable arriba (búsqueda por nombre o GPS); las zonas, el relieve y el cañón solo se muestran cerca de Tuxtla.
+- Cierre inesperado: queda guardado SIEMPRE en un txt (interno de la app + copia en Descargas), con versión, Android, teléfono, último estado y el error completo. No quitar en versiones futuras.
 - Actualización: GPS + refresco cada 15 min + botón Actualizar.
 
 ## Cómo compilar el APK
@@ -77,4 +79,4 @@ compilarse: falló antes de descargar dependencias o compilar nada.
 ## Estado de compilación
 - 2026-11-11: en esta VM no se pudo compilar (daemon de Gradle falla con "Unexpected type tag 109", build nunca llegó al código). JDK 17, SDK 34 y Gradle 8.7 sí quedaron instalados aquí.
 - GitHub Actions (`/.github/workflows/android.yml`) compila la APK en cada push a main. Descarga: Actions > run > Artifacts > geoviento-debug-apk. Con tag `vX.Y.Z` además crea un Release con la APK.
-- Versión actual: 1.0.5 (versionCode 6). Para actualizar, ver `docs/ACTUALIZACIONES.md` y `CHANGELOG.md`. Al instalar una APK nueva de Actions, desinstalar primero la anterior: cada build se firma con una clave distinta.
+- Versión actual: 1.2.0 (versionCode 14). Para actualizar, ver `docs/ACTUALIZACIONES.md` y `CHANGELOG.md`. Al instalar una APK nueva de Actions, desinstalar primero la anterior: cada build se firma con una clave distinta.
