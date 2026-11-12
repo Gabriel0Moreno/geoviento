@@ -111,6 +111,11 @@ class MainActivity : ComponentActivity() {
       var playing by remember { mutableStateOf(true) }
       var intensity by remember { mutableStateOf(1f) }
       var selectedZone by remember { mutableStateOf<String?>(null) }
+      // El mapa real se carga SOLO cuando Gabo lo pide con el botón: en la
+      // v1.1.2 el mapa se creaba al abrir y la app se cerraba sin dejar el
+      // archivo de error (fallo nativo del SDK, que el handler de Java no
+      // atrapa). Con el esquema por defecto la app abre seguro.
+      var loadRealMap by remember { mutableStateOf(false) }
       var checklist by remember { mutableStateOf(List(6) { false }) }
       var pdfBusy by remember { mutableStateOf(false) }
 
@@ -279,8 +284,15 @@ class MainActivity : ComponentActivity() {
           Text("Intensidad del flujo", style = MaterialTheme.typography.bodyMedium)
           Slider(value = intensity, onValueChange = { intensity = it }, valueRange = 0.5f..2f)
           if (showCurrents) {
-            RealMap(lat, lon, mapDir, mapGust, limit, playing, intensity, selectedZone, { selectedZone = it }) {
+            if (loadRealMap) {
+              RealMap(lat, lon, mapDir, mapGust, limit, playing, intensity, selectedZone, { selectedZone = it }) {
+                CurrentsMap(mapDir, mapGust, playing, intensity, selectedZone, { selectedZone = it }, Modifier.fillMaxWidth().height(220.dp))
+              }
+            } else {
               CurrentsMap(mapDir, mapGust, playing, intensity, selectedZone, { selectedZone = it }, Modifier.fillMaxWidth().height(220.dp))
+              Spacer(Modifier.height(8.dp))
+              OutlinedButton(onClick = { loadRealMap = true }) { Text("Cargar mapa real con calles") }
+              Text("El mapa real se carga solo cuando lo pides, para que la app abra aunque el mapa falle.", style = MaterialTheme.typography.bodySmall)
             }
           } else {
             Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { Text("Corrientes ocultas") }
