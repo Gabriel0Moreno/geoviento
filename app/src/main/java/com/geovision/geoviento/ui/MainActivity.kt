@@ -119,6 +119,8 @@ class MainActivity : ComponentActivity() {
       val dayError by vm.dayError.collectAsState()
       val weekRef by vm.weekRef.collectAsState()
       val places by vm.places.collectAsState()
+      val terrain by vm.terrain.collectAsState()
+      val terrainLoading by vm.terrainLoading.collectAsState()
       val context = LocalContext.current
       val focusManager = LocalFocusManager.current
       var lat by remember { mutableStateOf(16.75) }
@@ -183,12 +185,20 @@ class MainActivity : ComponentActivity() {
         CrashLog.lastState = "origen=$origin, fuente=${rep.source}, hora=${rep.now.time}, ráfaga=${rep.now.gust10} m/s, lugar=$lat,$lon ($placeName)"
       }
 
+      // El perfil del relieve sigue al lugar y al viento (v1.2.3): se pide
+      // cuando llegan datos nuevos del viento (que es cuando cambia el
+      // lugar o gira el viento).
+      LaunchedEffect(rep) {
+        vm.refreshTerrain(lat, lon, rep.now.dir10)
+      }
+
       // La interfaz SIEMPRE se ve: si aún no hay datos en vivo, se muestra el
       // ejemplo de la demo (marcado) o los datos guardados. Nunca pantalla blanca.
       val report: WindReport = rep
       val limit = drone.limit
-      // Las zonas, el relieve y el cañón son de Tuxtla: solo se muestran
-      // cuando el lugar principal está cerca de Tuxtla.
+      // Las zonas y el cañón son de Tuxtla: solo se muestran cuando el
+      // lugar principal está cerca de Tuxtla. El relieve ahora es real
+      // para cualquier lugar (v1.2.3), así que ya no va en este filtro.
       val isTuxtla = abs(lat - 16.75) < 0.5 && abs(lon - (-93.11)) < 0.5
       MaterialTheme {
         // Tocar en cualquier parte vacía esconde el teclado.
@@ -390,11 +400,11 @@ class MainActivity : ComponentActivity() {
           }
           Spacer(Modifier.height(12.dp))
 
-          // 7) Cómo se mueve el aire sobre el relieve — como en la demo (solo Tuxtla).
-          if (isTuxtla) {
-            ReliefSection()
-            Spacer(Modifier.height(12.dp))
-          }
+          // 7) Cómo se mueve el aire sobre el relieve: perfil REAL del
+          // terreno del lugar elegido (v1.2.3). En Tuxtla se conservan
+          // además las 3 explicaciones del valle y el cañón.
+          ReliefSection(terrain, terrainLoading, isTuxtla)
+          Spacer(Modifier.height(12.dp))
 
           // 8) Calculadora de viento por altura — como en la demo.
           AltitudeCalculator(report, limit) {}

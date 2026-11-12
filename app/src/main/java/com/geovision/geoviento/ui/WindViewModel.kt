@@ -39,6 +39,28 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
   // de la del informe PDF para no mezclar los resultados.
   val mainPlaces = MutableStateFlow<List<PlaceResult>>(emptyList())
 
+  // Perfil del relieve del lugar principal (v1.2.3): se carga con los
+  // datos del viento y se vuelve a pedir si el lugar cambia o si el
+  // viento gira más de 45° (el corte sigue el eje del viento).
+  val terrain = MutableStateFlow<TerrainProfile?>(null)
+  val terrainLoading = MutableStateFlow(false)
+  private var terrainKey: String? = null
+
+  fun refreshTerrain(lat: Double, lon: Double, dirFrom: Double) {
+    val locKey = "%.2f,%.2f".format(lat, lon)
+    val dirKey = ((dirFrom + 22.5) / 45).toInt()
+    val key = "$locKey,$dirKey"
+    if (key == terrainKey) return
+    val locChanged = terrainKey?.substringBeforeLast(",") != locKey
+    terrainKey = key
+    if (locChanged) terrain.value = null
+    viewModelScope.launch(handler) {
+      terrainLoading.value = true
+      repo.fetchTerrain(lat, lon, dirFrom)?.let { terrain.value = it }
+      terrainLoading.value = false
+    }
+  }
+
   // Si algo inesperado escapa del try, termina en mensaje de error, nunca en cierre.
   private val handler = CoroutineExceptionHandler { _, e ->
     error.value = "No se pudo actualizar el viento (${e.message}). Revisa tu internet y toca Actualizar ahora."
