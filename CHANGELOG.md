@@ -1,5 +1,16 @@
 # Changelog — GeoViento
 
+## [1.1.4] - 2026-11-11
+- La 1.1.3 ya ABRE (video de Gabo 20:56 CST: interfaz completa con datos en
+  vivo, semáforo AMARILLO 9.8 m/s, condiciones en superficie, gráfica de
+  líneas, ventanas, esquema y zonas), pero con dos errores visibles: (1) el
+  teclado quedaba abierto tapando la pantalla — el campo de búsqueda del
+  informe agarraba el foco al abrir y no había forma de esconderlo; ahora se
+  quita el foco al arrancar, tocar en cualquier parte vacía esconde el
+  teclado, el botón "Buscar" lo esconde y la tecla Listo también; (2) la
+  tarjeta "SEMÁFORO AHORA" decía "YELLOW" (nombre del enum en inglés) en
+  vez de "AMARILLO".
+
 ## [1.1.3] - 2026-11-11
 - La 1.1.2 se cerraba al entrar SIN dejar geoviento-crash.txt: el handler de
   Java de la v1.0.4 solo atrapa excepciones de Java, no fallos nativos. El
