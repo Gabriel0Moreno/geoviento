@@ -1,5 +1,20 @@
 # Changelog — GeoViento
 
+## [1.1.5] - 2026-11-11
+- EL MAPA REAL YA NO ES MAPLIBRE: el video de Gabo 22:15 CST muestra el
+  cierre exacto — toca "Cargar mapa real", sale "Cargando mapa..." y aparece
+  el diálogo del sistema "Geoviento Mx continúa fallando". Y NO hay
+  geoviento-crash.txt en Descargas: el fallo es NATIVO del SDK, el handler
+  de Java no lo atrapa y no hay forma de ver la causa desde el teléfono. En
+  vez de adivinar a ciegas, el mapa real ahora es un WebView con Leaflet +
+  baldosas OpenStreetMap (el mismo mapa de la demo, que ya funciona en su
+  teléfono): 5 zonas numeradas tocables, flechas animadas con la dirección
+  y la ráfaga de la hora elegida, pausa y slider de intensidad. Se eliminó
+  la dependencia MapLibre y RealMap.kt; si el WebView no carga (sin
+  internet o CDN caído) cae al esquema Canvas de antes. La v1.1.4 quedó
+  verificada en el mismo video: teclado ya no tapa la pantalla y el
+  semáforo dice AMARILLO en español.
+
 ## [1.1.4] - 2026-11-11
 - La 1.1.3 ya ABRE (video de Gabo 20:56 CST: interfaz completa con datos en
   vivo, semáforo AMARILLO 9.8 m/s, condiciones en superficie, gráfica de
