@@ -1,5 +1,30 @@
 # Changelog — GeoViento
 
+## [1.2.2] - 2026-11-12
+- MAPA (por fin): en la 1.2.1 seguía en blanco. Causa real: la
+  verificación de 8 s estaba dentro de onPageFinished, que NUNCA se
+  dispara si la página se queda colgada esperando el CDN (el <script>
+  de unpkg en el <head> bloquea el parseo). Ahora Leaflet 1.9.4 ya no
+  viene de ningún CDN: leaflet.js y leaflet.css van DENTRO de la app
+  (app/src/main/assets/) y se incrustan en la página, así que el mapa
+  arranca siempre que haya datos; solo las baldosas de calles siguen
+  viniendo de OpenStreetMap. La verificación de 8 s ahora se programa
+  al CREAR el WebView, no al terminar la página, y comprueba que
+  Leaflet arrancó (window.__mapReady); si no, cae al esquema.
+- PDF COMPLETO: el informe era de UNA sola página y la tabla hora por
+  hora se cortaba a las ~18 filas y la referencia y el checklist
+  quedaban FUERA de la página. Ahora el PDF pagina: abre una página
+  nueva cuando el contenido ya no cabe y sale todo, aunque ocupe dos
+  páginas.
+- CAMBIO DE UBICACIÓN SIN PERDER INFO: las zonas, el relieve y el
+  cañón son de Tuxtla y no pueden describir otra ciudad, pero ahora en
+  otro lugar aparece una nota que lo explica en vez de que la
+  información "desaparezca" sin más. Además las líneas de giro de
+  viento ya no dicen fijo "noroeste" / "gira al NO" (patrón de
+  Tuxtla): ahora salen de los datos de esa ciudad y solo aparecen si
+  la tarde gira de verdad más de 45°. La mención al cañón y la meseta
+  en la intro del PDF también solo sale si el informe es de Tuxtla.
+
 ## [1.2.1] - 2026-11-11
 - LA 1.2.0 NO COMPILÓ (run #97): MainActivity usa BuildConfig para poner
   la versión de la app en el txt de cierre, pero en el plugin de Android
