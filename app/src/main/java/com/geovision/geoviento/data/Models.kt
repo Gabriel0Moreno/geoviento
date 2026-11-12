@@ -17,13 +17,41 @@ data class AirQualityNow(val aqiUs: Double?, val pm25: Double?)
 
 data class WindReport(val now: WindNow, val hourly: List<HourlyPoint>, val source: String, val lat: Double, val lon: Double, val surface: SurfaceNow? = null, val air: AirQualityNow? = null, val placeName: String? = null)
 
-// Opciones de dron para el informe y el semáforo (la demo trae 3).
+// Opciones de dron para el informe y el semáforo: lista completa de DJI
+// con su resistencia máxima al viento publicada por DJI (m/s).
 // Verde < 75% del límite, amarillo 75%-100%, rojo >= límite.
 data class DroneOption(val name: String, val limit: Double)
 val DRONES = listOf(
   DroneOption("DJI Lito X1 / clase <249 g", 10.7),
-  DroneOption("Clase ligera ampliada", 12.0),
-  DroneOption("Clase media", 15.0)
+  DroneOption("DJI Neo", 8.0),
+  DroneOption("DJI Mavic Mini", 8.0),
+  DroneOption("DJI Mini SE", 8.5),
+  DroneOption("DJI Mini 2 SE", 10.7),
+  DroneOption("DJI Mini 2", 10.7),
+  DroneOption("DJI Mini 3", 10.7),
+  DroneOption("DJI Mini 3 Pro", 10.7),
+  DroneOption("DJI Mini 4 Pro", 10.7),
+  DroneOption("DJI Mini 4K", 10.7),
+  DroneOption("DJI Flip", 10.7),
+  DroneOption("DJI Air 2S", 10.7),
+  DroneOption("DJI Mavic Air 2", 10.7),
+  DroneOption("DJI Air 3", 12.0),
+  DroneOption("DJI Air 3S", 12.0),
+  DroneOption("DJI Mavic 2 Pro / Zoom", 10.0),
+  DroneOption("DJI Mavic 3", 12.0),
+  DroneOption("DJI Mavic 3 Classic", 12.0),
+  DroneOption("DJI Mavic 3 Pro", 12.0),
+  DroneOption("DJI Mavic 3 Enterprise", 12.0),
+  DroneOption("DJI Avata", 10.7),
+  DroneOption("DJI Avata 2", 10.7),
+  DroneOption("DJI FPV", 13.5),
+  DroneOption("DJI Phantom 4 Pro", 10.0),
+  DroneOption("DJI Inspire 2", 10.0),
+  DroneOption("DJI Inspire 3", 14.0),
+  DroneOption("DJI Matrice 30 / 30T", 15.0),
+  DroneOption("DJI Matrice 300 RTK", 15.0),
+  DroneOption("DJI Matrice 350 RTK", 12.0),
+  DroneOption("DJI Matrice 4T / 4E", 12.0)
 )
 
 // Zonas de vuelo de la demo (coordenadas reales alrededor de Tuxtla).
