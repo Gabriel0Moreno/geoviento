@@ -1,5 +1,17 @@
 # Changelog — GeoViento
 
+## [1.1.1] - 2026-11-11
+- LA 1.1.0 NO COMPILABA: `Unresolved reference 'maplibre'` en RealMap.kt.
+  Causa exacta (verificada en el AAR descargado de Maven Central): el SDK
+  10.2.0 todavía usa los paquetes viejos de Mapbox
+  (com.mapbox.mapboxsdk.*); el paquete org.maplibre.android.* llegó en la
+  11.x. La dependencia SÍ estaba declarada y SÍ existe (POM, módulo y AAR
+  con HTTP 200); el error era de los imports, no de la dependencia.
+  Corregido cambiando los imports de RealMap.kt a com.mapbox.mapboxsdk
+  (Mapbox.getInstance, MapboxMap, MapView, Style, GeoJsonSource,
+  SymbolLayer, PropertyFactory, Expression) y las clases GeoJSON siguen en
+  com.mapbox.geojson (artefacto transitivo android-sdk-geojson 5.9.0).
+
 ## [1.1.0] - 2026-11-11
 - LA INTERFAZ COMPLETA DE LA DEMO, CON TODAS SUS FUNCIONALIDADES, EN LA APP
   (a pedido de Gabo, con el video de la demo como referencia):
