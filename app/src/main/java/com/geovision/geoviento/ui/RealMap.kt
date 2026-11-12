@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -257,9 +258,9 @@ fun ZoneCards(selectedZone: String?, onZoneSelected: (String?) -> Unit) {
   ZONES.forEachIndexed { i, z ->
     val selected = selectedZone == z.name
     Card(
-      Modifier.fillMaxWidth(),
-      colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFFE0F0E4) else Color(0xFFE8EEF2)),
-      onClick = { onZoneSelected(if (selected) null else z.name) }
+      onClick = { onZoneSelected(if (selected) null else z.name) },
+      modifier = Modifier.fillMaxWidth(),
+      colors = CardDefaults.cardColors(containerColor = if (selected) androidx.compose.ui.graphics.Color(0xFFE0F0E4) else androidx.compose.ui.graphics.Color(0xFFE8EEF2))
     ) {
       Column(Modifier.padding(12.dp)) {
         Row {
@@ -267,7 +268,7 @@ fun ZoneCards(selectedZone: String?, onZoneSelected: (String?) -> Unit) {
           Text("${z.elevM} m", style = MaterialTheme.typography.bodySmall)
         }
         Text(z.note, style = MaterialTheme.typography.bodySmall)
-        Text(z.tag, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFF1B7A3D))
+        Text(z.tag, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color(0xFF1B7A3D))
       }
     }
     Spacer(Modifier.height(8.dp))
