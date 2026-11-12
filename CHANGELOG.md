@@ -1,5 +1,21 @@
 # Changelog — GeoViento
 
+## [1.2.3] - 2026-11-12
+- RELIEVE REAL POR UBICACIÓN: el corte del relieve ya no es el esquema
+  fijo de Tuxtla. Ahora es el perfil REAL del lugar elegido: 21 alturas
+  de la API de elevación de Open-Meteo (gratis, sin clave) sobre un corte
+  de 30 km en el eje del viento, con el lugar marcado, el mínimo y el
+  máximo, el desnivel total y la clasificación del terreno (llano, valle
+  suave, terreno quebrado o zona montañosa), más aviso si hay una subida
+  fuerte en el corte. Verificado antes de programarlo: el corte de Tuxtla
+  da Copoya ~850 m, valle ~530 m, cerro del norte ~1270 m y fondo del
+  cañón 415 m. El perfil se vuelve a pedir si cambia el lugar o si el
+  viento gira más de 45°. En Tuxtla se conservan las 3 explicaciones del
+  valle y el cañón; el esquema viejo solo sale si el perfil real no cargó
+  y el lugar es Tuxtla. Los nombres de los cerros no se incluyeron: el
+  servidor de OpenStreetMap (Overpass) rechazó las consultas desde aquí,
+  así que no se construyó nada sobre esa fuente.
+
 ## [1.2.2] - 2026-11-12
 - MAPA (por fin): en la 1.2.1 seguía en blanco. Causa real: la
   verificación de 8 s estaba dentro de onPageFinished, que NUNCA se
