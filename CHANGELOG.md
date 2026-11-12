@@ -1,5 +1,21 @@
 # Changelog — GeoViento
 
+## [1.2.4] - 2026-11-12
+- MAPA (diagnóstico + otro intento): la 1.2.3 seguía en blanco CON
+  Leaflet local y sin caer al esquema (versión 1.2.3 confirmada por
+  Gabo en Ajustes). La comprobación por JavaScript no sirve si la
+  página ni siquiera se dibujó: en una página rota el callback de
+  evaluateJavascript puede no dispararse nunca. Ahora la página ya no
+  se carga con loadDataWithBaseURL (una cadena de ~165 KB que el
+  WebView puede no tragar) sino desde un archivo en cacheDir con
+  loadUrl("file://..."). La verificación de 8 s mira primero una
+  señal NATIVA (contentHeight == 0 → la página no se dibujó → esquema)
+  y luego por JavaScript Leaflet, __mapReady y la altura real del
+  contenedor #map. Y hay una línea de diagnóstico visible bajo el mapa
+  con el resultado de la comprobación, para saber en el teléfono qué
+  falló sin adivinar. Además la app ya muestra su número de versión al
+  pie ("Geoviento Mx v1.2.4"), para saber siempre cuál está instalada.
+
 ## [1.2.3] - 2026-11-12
 - RELIEVE REAL POR UBICACIÓN: el corte del relieve ya no es el esquema
   fijo de Tuxtla. Ahora es el perfil REAL del lugar elegido: 21 alturas
