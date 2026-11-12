@@ -21,22 +21,25 @@ import com.mapbox.geojson.FeatureCollection
 import com.mapbox.geojson.Point
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import org.maplibre.android.MapLibre
-import org.maplibre.android.camera.CameraPosition
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.maps.Style
-import org.maplibre.android.style.expressions.Expression
-import org.maplibre.android.style.layers.PropertyFactory.*
-import org.maplibre.android.style.layers.SymbolLayer
-import org.maplibre.android.style.sources.GeoJsonSource
+import com.mapbox.mapboxsdk.Mapbox
+import com.mapbox.mapboxsdk.camera.CameraPosition
+import com.mapbox.mapboxsdk.geometry.LatLng
+import com.mapbox.mapboxsdk.maps.MapboxMap
+import com.mapbox.mapboxsdk.maps.MapView
+import com.mapbox.mapboxsdk.maps.Style
+import com.mapbox.mapboxsdk.style.expressions.Expression
+import com.mapbox.mapboxsdk.style.layers.PropertyFactory.*
+import com.mapbox.mapboxsdk.style.layers.SymbolLayer
+import com.mapbox.mapboxsdk.style.sources.GeoJsonSource
 import kotlin.math.cos
 import kotlin.math.sin
 
 // Mapa REAL con baldosas (MapLibre, estilo demotiles con datos OSM) y flechas
 // de corriente animadas, como en la demo. Si el mapa no carga (sin internet
 // o error del estilo), se muestra el esquema de respaldo que ya tenía la app.
+// OJO: el SDK 10.2.0 todavía usa los paquetes viejos de Mapbox
+// (com.mapbox.mapboxsdk.*); el paquete org.maplibre.android.* llegó en la 11.x.
+// Por eso los imports son com.mapbox.mapboxsdk, no org.maplibre.android.
 @Composable
 fun RealMap(
   lat: Double, lon: Double,
@@ -48,7 +51,7 @@ fun RealMap(
   val context = LocalContext.current
   val lifecycle = LocalLifecycleOwner.current.lifecycle
   var mapView by remember { mutableStateOf<MapView?>(null) }
-  var mapLibreMap by remember { mutableStateOf<MapLibreMap?>(null) }
+  var mapboxMap by remember { mutableStateOf<MapboxMap?>(null) }
   var flowSource by remember { mutableStateOf<GeoJsonSource?>(null) }
   var flowLayer by remember { mutableStateOf<SymbolLayer?>(null) }
   var mapReady by remember { mutableStateOf(false) }
@@ -144,12 +147,12 @@ fun RealMap(
   AndroidView(
     factory = { ctx ->
       try {
-        MapLibre.getInstance(ctx)
+        Mapbox.getInstance(ctx)
         MapView(ctx).apply {
           mapView = this
           onCreate(null)
           getMapAsync { map ->
-            mapLibreMap = map
+            mapboxMap = map
             map.cameraPosition = CameraPosition.Builder()
               .target(LatLng(lat, lon)).zoom(11.0).build()
             map.setStyle("https://demotiles.maplibre.org/tiles/tiles.json", object : Style.OnStyleLoaded {
