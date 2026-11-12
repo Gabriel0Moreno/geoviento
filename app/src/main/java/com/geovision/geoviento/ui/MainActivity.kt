@@ -534,7 +534,7 @@ class MainActivity : ComponentActivity() {
             Spacer(Modifier.height(12.dp))
           }
           Button(onClick = { vm.refresh(lat, lon) }, enabled = !loading) { Text("Actualizar ahora") }
-          Text("Se actualiza solo cada 15 min.", style = MaterialTheme.typography.bodySmall)
+          Text("Geoviento Mx v${BuildConfig.VERSION_NAME} · Se actualiza solo cada 15 min.", style = MaterialTheme.typography.bodySmall)
         }
       }
     }

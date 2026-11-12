@@ -8,16 +8,19 @@
 // el esquema Canvas de antes. La demo web usa este mismo mapa Leaflet y
 // ya funciona en el teléfono.
 //
-// Por qué en la v1.2.1 el mapa seguía en blanco: la verificación de 8 s
-// estaba dentro de onPageFinished, que NUNCA se dispara si la página se
-// queda colgada esperando el CDN (el <script src> de unpkg en el <head>
-// bloquea el parseo). Así que el mapa quedaba en blanco sin caer nunca
-// al esquema. En la v1.2.2 Leaflet ya no viene de ningún CDN: los archivos
-// leaflet.js y leaflet.css van DENTRO de la app (app/src/main/assets/) y
-// se incrustan en la página, así que el mapa arranca siempre que haya
-// datos; solo las baldosas de calles siguen viniendo de OpenStreetMap.
-// La verificación de 8 s ahora se programa al CREAR el WebView, no al
-// terminar la página, así que un WebView colgado cae al esquema.
+// v1.2.4: en la v1.2.3 el mapa SEGUÍA en blanco con Leaflet local y sin
+// caer al esquema (captura de Gabo 01:04, versión 1.2.3 confirmada en
+// Ajustes: área blanca, sin "Cargando mapa…" ni esquema). La comprobación
+// por JavaScript no sirve si la página ni siquiera se dibujó: en una
+// página rota el callback de evaluateJavascript puede no dispararse
+// nunca. Cambios: (1) la página ya no se carga con loadDataWithBaseURL
+// (una cadena de ~165 KB que el WebView puede no tragar) sino desde un
+// archivo en cacheDir con loadUrl("file://..."); (2) la verificación de
+// 8 s mira primero una señal NATIVA (contentHeight == 0 → la página no
+// se dibujó → esquema) y luego por JavaScript Leaflet, __mapReady y la
+// altura real del contenedor #map; (3) hay una línea de diagnóstico
+// visible bajo el mapa con el resultado de la comprobación, para saber
+// en el teléfono qué falló sin adivinar.
 package com.geovision.geoviento.ui
 
 import android.annotation.SuppressLint
@@ -30,12 +33,15 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -70,6 +76,9 @@ fun WebMap(
   var webView by remember { mutableStateOf<WebView?>(null) }
   var pageLoaded by remember { mutableStateOf(false) }
   var webFailed by remember { mutableStateOf(false) }
+  // Diagnóstico visible del mapa (v1.2.4): qué encontró la comprobación,
+  // para saber en el teléfono qué falló sin adivinar.
+  var mapStatus by remember { mutableStateOf("Mapa: cargando…") }
   // Leaflet local (assets): se lee una sola vez; si fallara, la página
   // no tendría L y la verificación de 8 s caería al esquema.
   val context = LocalContext.current
@@ -95,6 +104,8 @@ fun WebMap(
 
   if (webFailed) {
     fallback()
+    Spacer(Modifier.height(4.dp))
+    Text(mapStatus, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
     return
   }
   Box(Modifier.fillMaxWidth().height(300.dp)) {
@@ -103,38 +114,67 @@ fun WebMap(
         WebView(ctx).apply {
           settings.javaScriptEnabled = true
           settings.domStorageEnabled = true
-          addJavascriptInterface(ZoneBridge(onZone) { webFailed = true }, "Android")
+          settings.allowFileAccess = true
+          settings.allowUniversalAccessFromFileURLs = true
+          addJavascriptInterface(ZoneBridge(onZone) { mapStatus = "Mapa: error de la página → esquema"; webFailed = true }, "Android")
           webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
               pageLoaded = true
+              mapStatus = "Mapa: página cargada, comprobando…"
               view.evaluateJavascript("updateWind($dir, $gust)", null)
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-              if (request.isForMainFrame) webFailed = true
+              if (request.isForMainFrame) {
+                mapStatus = "Mapa: error al cargar la página → esquema"
+                webFailed = true
+              }
             }
 
             // Si el proceso del WebView muere, no se cierra la app: se
             // muestra el esquema y listo.
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+              mapStatus = "Mapa: el visor falló → esquema"
               webFailed = true
               return true
             }
           }
-          loadDataWithBaseURL("https://tile.openstreetmap.org/", html, "text/html", "utf-8", null)
-          // Verificación con tiempo límite DESDE LA CREACIÓN (v1.2.2): en
-          // la v1.2.1 estaba dentro de onPageFinished, que nunca se
-          // dispara si la página se queda colgada; por eso el mapa
-          // quedaba en blanco. A los 8 s se comprueba si Leaflet arrancó
-          // y, si no, cae al esquema.
+          // Carga desde archivo (v1.2.4): loadDataWithBaseURL con ~165 KB
+          // puede no tragárselo el WebView y dejar la página en blanco sin
+          // error. El archivo se reescribe en cada creación del WebView.
+          val loadedFromFile = try {
+            val f = java.io.File(ctx.cacheDir, "geoviento-map.html")
+            f.writeText(html)
+            loadUrl("file://${f.absolutePath}")
+            true
+          } catch (_: Exception) {
+            false
+          }
+          if (!loadedFromFile) {
+            loadDataWithBaseURL("https://tile.openstreetmap.org/", html, "text/html", "utf-8", null)
+          }
+          // Verificación con tiempo límite DESDE LA CREACIÓN: primero una
+          // señal NATIVA (contentHeight == 0 → la página no se dibujó) y
+          // luego por JavaScript (Leaflet, __mapReady y alto del contenedor).
           Handler(Looper.getMainLooper()).postDelayed({
             if (!webFailed) {
-              try {
-                evaluateJavascript("(typeof L !== 'undefined' && window.__mapReady === true)") { result ->
-                  if (result != "true") webFailed = true
-                }
-              } catch (_: Exception) {
+              if (contentHeight == 0) {
+                mapStatus = "Mapa: la página no se dibujó (alto 0) → esquema"
                 webFailed = true
+              } else {
+                try {
+                  evaluateJavascript("""(typeof L !== 'undefined') + '|' + (window.__mapReady === true) + '|' + (document.getElementById('map') ? document.getElementById('map').clientHeight : -1)""") { result ->
+                    val parts = (result ?: "").trim('"').split("|")
+                    val hasL = parts.getOrNull(0) == "true"
+                    val ready = parts.getOrNull(1) == "true"
+                    val h = parts.getOrNull(2)?.toIntOrNull() ?: -1
+                    mapStatus = "Mapa: Leaflet " + if (hasL) "✓" else "✗" + " · listo " + if (ready) "✓" else "✗" + " · alto " + h + " px"
+                    if (!hasL || !ready || h <= 50) webFailed = true
+                  }
+                } catch (_: Exception) {
+                  mapStatus = "Mapa: no se pudo comprobar → esquema"
+                  webFailed = true
+                }
               }
             }
           }, 8000)
@@ -149,6 +189,8 @@ fun WebMap(
       }
     }
   }
+  Spacer(Modifier.height(4.dp))
+  Text(mapStatus, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
   LaunchedEffect(pageLoaded, dir, gust) {
     if (pageLoaded) webView?.evaluateJavascript("updateWind($dir, $gust)", null)
   }
