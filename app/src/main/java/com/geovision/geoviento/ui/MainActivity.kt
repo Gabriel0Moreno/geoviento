@@ -13,9 +13,13 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -85,6 +91,7 @@ class MainActivity : ComponentActivity() {
       val weekRef by vm.weekRef.collectAsState()
       val places by vm.places.collectAsState()
       val context = LocalContext.current
+      val focusManager = LocalFocusManager.current
       var lat by remember { mutableStateOf(16.75) }
       var lon by remember { mutableStateOf(-93.11) }
       var hasPermission by remember { mutableStateOf(false) }
@@ -92,7 +99,10 @@ class MainActivity : ComponentActivity() {
 
       // Permiso de ubicación después del primer frame (no en onCreate),
       // y la primera carga con la ubicación por defecto de Tuxtla.
+      // Se quita el foco (y el teclado) por si el campo de búsqueda del
+      // informe lo agarró solo al abrir: el teclado no debe salir al entrar.
       LaunchedEffect(Unit) {
+        focusManager.clearFocus()
         onPermission = { granted ->
           hasPermission = granted
           if (granted) loadGps(fused, { la, lo -> lat = la; lon = lo }, { vm.refresh(lat, lon) })
@@ -133,7 +143,11 @@ class MainActivity : ComponentActivity() {
       val report: WindReport = rep
       val limit = drone.limit
       MaterialTheme {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        // Tocar en cualquier parte vacía esconde el teclado.
+        Column(
+          Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { focusManager.clearFocus() }
+        ) {
           // Encabezado de marca (como en la demo).
           Text("Geoviento Mx — Viento para dron", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF0A2E4D))
           Text("TUXTLA GUTIÉRREZ, CHIAPAS · %.3f° N, %.3f° O · %s M S. N. M.".format(lat, -lon, report.surface?.elevation?.let { "%.0f".format(it) } ?: "535"), style = MaterialTheme.typography.bodySmall)
@@ -331,9 +345,15 @@ class MainActivity : ComponentActivity() {
           Spacer(Modifier.height(8.dp))
           Text("Ubicación del vuelo", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
           Text("Sitio seleccionado: $pdfPlace", style = MaterialTheme.typography.bodySmall)
-          OutlinedTextField(value = pdfQuery, onValueChange = { pdfQuery = it }, label = { Text("Buscar otra ubicación por nombre") }, modifier = Modifier.fillMaxWidth())
+          OutlinedTextField(
+            value = pdfQuery, onValueChange = { pdfQuery = it },
+            label = { Text("Buscar otra ubicación por nombre") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+          )
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { vm.searchPlaces(pdfQuery) }) { Text("Buscar") }
+            Button(onClick = { vm.searchPlaces(pdfQuery); focusManager.clearFocus() }) { Text("Buscar") }
             OutlinedButton(onClick = {
               pdfLat = "%.4f".format(lat); pdfLon = "%.4f".format(lon)
               pdfPlace = "Mi ubicación actual (%.4f, %.4f)".format(lat, lon)
