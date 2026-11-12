@@ -1,5 +1,46 @@
 # Changelog — GeoViento
 
+## [1.2.0] - 2026-11-11
+- MAPA: en la 1.1.6 el WebView se veía en blanco. Causa: Leaflet venía
+  de un solo CDN (unpkg); si ese CDN no responde, la página nunca
+  termina de cargar, el evento `load` nunca se dispara y el mapa queda
+  en blanco sin error. Ahora hay DOS CDN (unpkg y jsdelivr, con
+  respaldo automático), una verificación con tiempo límite desde Kotlin
+  (si a los 8 s no existe Leaflet, cae al esquema) y onRenderProcessGone
+  (si el WebView falla, muestra el esquema en vez de cerrar la app).
+- UBICACIÓN PRINCIPAL CAMBIABLE: arriba, bajo el encabezado, hay
+  búsqueda por nombre ("Buscar lugar para el viento") y botón "Mi
+  ubicación". El encabezado muestra el nombre del lugar elegido y sus
+  coordenadas. Las zonas, el relieve, el cañón y su nota solo se
+  muestran cerca de Tuxtla; en otro lugar el mapa se centra ahí con
+  sus propias flechas y el resto de la app sigue igual.
+- DRONES DJI: lista completa seleccionable con la resistencia máxima al
+  viento publicada por DJI: Neo 8, Mini SE 8.5, Mavic Mini 8, Mini 2 SE
+  / Mini 2 / Mini 3 / Mini 3 Pro / Mini 4 Pro / Mini 4K / Flip 10.7,
+  Air 2S / Mavic Air 2 10.7, Air 3 / Air 3S 12, Mavic 2 Pro/Zoom 10,
+  Mavic 3 / Classic / Pro / Enterprise 12, Avata / Avata 2 10.7,
+  FPV 13.5, Phantom 4 Pro 10, Inspire 2 10, Inspire 3 14, Matrice 30/30T
+  15, Matrice 300 RTK 15, Matrice 350 RTK 12, Matrice 4T/4E 12, y el
+  DJI Lito X1 / clase <249 g 10.7 sigue primero y por defecto.
+- CIERRE EN TXT, PERMANENTE: si la app se cierra de forma inesperada,
+  el error queda guardado SIEMPRE (no se quita en versiones futuras):
+  archivo con fecha y hora en el almacenamiento interno de la app
+  (carpeta "crashes", nunca se pisa el anterior) y copia en Descargas,
+  con versión de la app, Android, modelo del teléfono, último estado
+  (origen, fuente, hora, ráfaga, lugar) y el error completo. OJO: esto
+  atrapa errores de la app; un fallo NATIVO (como el de MapLibre) no lo
+  puede atrapar nadie desde aquí, por eso el mapa ya no usa código nativo.
+- SIN INFORMACIÓN REPETIDA: se quitó lo que ya estaba en otra parte —
+  la tarjeta de límite (estaba en el veredicto y en los chips del dron),
+  la "Mejor ventana" del veredicto (está en las tarjetas de ventanas),
+  la tarjeta de dirección (está en la brújula), la leyenda bajo el mapa
+  (está arriba de la brújula), el párrafo que repetía dirección/viento/
+  ráfaga bajo el mapa (queda solo la nota del cañón, cerca de Tuxtla),
+  la nota de la capa esquemática (ya no aplica al mapa real), la línea
+  del dron en el informe PDF (el dron se elige arriba) y los umbrales
+  del pie (están en la leyenda). Además la nota del cañón ya no sale en
+  el PDF de lugares fuera de Tuxtla.
+
 ## [1.1.6] - 2026-11-11
 - LA 1.1.5 NO COMPILÓ (run #84): al borrar RealMap.kt me llevé también
   dos cosas que otros archivos usaban — las tarjetas ZoneCards (que usa
