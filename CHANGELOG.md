@@ -1,5 +1,11 @@
 # Changelog — GeoViento
 
+## [1.2.1] - 2026-11-11
+- LA 1.2.0 NO COMPILÓ (run #97): MainActivity usa BuildConfig para poner
+  la versión de la app en el txt de cierre, pero en el plugin de Android
+  8.x BuildConfig NO se genera por defecto. Corregido activando
+  `buildConfig = true` en app/build.gradle.kts. Nada más cambió.
+
 ## [1.2.0] - 2026-11-11
 - MAPA: en la 1.1.6 el WebView se veía en blanco. Causa: Leaflet venía
   de un solo CDN (unpkg); si ese CDN no responde, la página nunca
