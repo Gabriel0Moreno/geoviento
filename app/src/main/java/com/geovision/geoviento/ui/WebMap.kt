@@ -26,7 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.geovision.geoviento.data.Tuxtla_ZONES
+import com.geovision.geoviento.data.ZONES
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -59,13 +59,13 @@ fun WebMap(
   var webFailed by remember { mutableStateOf(false) }
   val zonesJson = remember {
     JSONArray().apply {
-      Tuxtla_ZONES.forEachIndexed { i, z ->
+      ZONES.forEachIndexed { i, z ->
         put(JSONObject().apply {
           put("n", i + 1)
           put("name", z.name)
           put("lat", z.lat)
           put("lon", z.lon)
-          put("elev", z.elev)
+          put("elev", z.elevM)
           put("tag", z.tag)
         })
       }
