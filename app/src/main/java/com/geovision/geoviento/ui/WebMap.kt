@@ -8,13 +8,16 @@
 // el esquema Canvas de antes. La demo web usa este mismo mapa Leaflet y
 // ya funciona en el teléfono.
 //
-// Por qué en la v1.1.6 el mapa se veía en blanco: Leaflet se cargaba de un
-// solo CDN (unpkg); si ese CDN no responde, la página nunca termina de
-// cargar, el evento `load` nunca se dispara y el mapa queda en blanco sin
-// error. Ahora hay DOS CDN (unpkg y jsdelivr) y una verificación con
-// tiempo límite desde Kotlin: si Leaflet no existe a los 8 s, cae al
-// esquema. Además onRenderProcessGone evita que un fallo del renderizador
-// del WebView cierre la app: muestra el esquema en su lugar.
+// Por qué en la v1.2.1 el mapa seguía en blanco: la verificación de 8 s
+// estaba dentro de onPageFinished, que NUNCA se dispara si la página se
+// queda colgada esperando el CDN (el <script src> de unpkg en el <head>
+// bloquea el parseo). Así que el mapa quedaba en blanco sin caer nunca
+// al esquema. En la v1.2.2 Leaflet ya no viene de ningún CDN: los archivos
+// leaflet.js y leaflet.css van DENTRO de la app (app/src/main/assets/) y
+// se incrustan en la página, así que el mapa arranca siempre que haya
+// datos; solo las baldosas de calles siguen viniendo de OpenStreetMap.
+// La verificación de 8 s ahora se programa al CREAR el WebView, no al
+// terminar la página, así que un WebView colgado cae al esquema.
 package com.geovision.geoviento.ui
 
 import android.annotation.SuppressLint
@@ -33,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.geovision.geoviento.data.ZONES
@@ -66,6 +70,11 @@ fun WebMap(
   var webView by remember { mutableStateOf<WebView?>(null) }
   var pageLoaded by remember { mutableStateOf(false) }
   var webFailed by remember { mutableStateOf(false) }
+  // Leaflet local (assets): se lee una sola vez; si fallara, la página
+  // no tendría L y la verificación de 8 s caería al esquema.
+  val context = LocalContext.current
+  val leafletJs = remember { try { context.assets.open("leaflet.js").bufferedReader().readText() } catch (_: Exception) { "" } }
+  val leafletCss = remember { try { context.assets.open("leaflet.css").bufferedReader().readText() } catch (_: Exception) { "" } }
   val zonesJson = remember {
     JSONArray().apply {
       ZONES.forEachIndexed { i, z ->
@@ -80,8 +89,8 @@ fun WebMap(
       }
     }.toString()
   }
-  val html = remember(zonesJson, limit) {
-    buildWebMapHtml(zonesJson, lat, lon, dir, gust, limit)
+  val html = remember(zonesJson, limit, leafletJs, leafletCss) {
+    buildWebMapHtml(zonesJson, lat, lon, dir, gust, limit, leafletCss, leafletJs)
   }
 
   if (webFailed) {
@@ -99,16 +108,6 @@ fun WebMap(
             override fun onPageFinished(view: WebView, url: String) {
               pageLoaded = true
               view.evaluateJavascript("updateWind($dir, $gust)", null)
-              // Verificación con tiempo límite: si el CDN se quedó colgado,
-              // la página "termina" pero Leaflet nunca existió. A los 8 s
-              // se comprueba y, si no hay Leaflet, cae al esquema.
-              Handler(Looper.getMainLooper()).postDelayed({
-                if (!webFailed) {
-                  view.evaluateJavascript("typeof L") { result ->
-                    if (result == "\"undefined\"") webFailed = true
-                  }
-                }
-              }, 8000)
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -123,6 +122,22 @@ fun WebMap(
             }
           }
           loadDataWithBaseURL("https://tile.openstreetmap.org/", html, "text/html", "utf-8", null)
+          // Verificación con tiempo límite DESDE LA CREACIÓN (v1.2.2): en
+          // la v1.2.1 estaba dentro de onPageFinished, que nunca se
+          // dispara si la página se queda colgada; por eso el mapa
+          // quedaba en blanco. A los 8 s se comprueba si Leaflet arrancó
+          // y, si no, cae al esquema.
+          Handler(Looper.getMainLooper()).postDelayed({
+            if (!webFailed) {
+              try {
+                evaluateJavascript("(typeof L !== 'undefined' && window.__mapReady === true)") { result ->
+                  if (result != "true") webFailed = true
+                }
+              } catch (_: Exception) {
+                webFailed = true
+              }
+            }
+          }, 8000)
           webView = this
         }
       },
@@ -154,23 +169,12 @@ fun WebMap(
 // HTML del mapa: Leaflet + OSM, 5 zonas numeradas (tocar una avisa a la
 // app) y flechas que se mueven con el viento. Sin template literals de JS
 // (${...}) para no chocar con las plantillas de Kotlin.
-private fun buildWebMapHtml(zonesJson: String, lat: Double, lon: Double, dir: Double, gust: Double, limit: Double): String {
+private fun buildWebMapHtml(zonesJson: String, lat: Double, lon: Double, dir: Double, gust: Double, limit: Double, leafletCss: String, leafletJs: String): String {
   val raw = """
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<style>__LEAFLET_CSS__</style>
 <style>html,body{margin:0;height:100%}#map{height:100%;width:100%}.znum{background:#0A2E4D;color:#fff;border:2px solid #fff;border-radius:50%;width:26px;height:26px;line-height:22px;text-align:center;font-weight:bold;font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.4)}.znum.sel{background:#B3261E}.zlab{background:rgba(255,255,255,.92);border-radius:4px;padding:1px 5px;font-size:11px;font-weight:bold;white-space:nowrap}.arr{font-size:22px;line-height:1;text-shadow:0 0 3px #fff,0 0 3px #fff}</style>
-<script>
-function __leafletFallback(){
-  if(typeof L !== 'undefined'){ initMap(); return; }
-  var s=document.createElement('script');
-  s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
-  s.onload=function(){ initMap(); };
-  s.onerror=function(){ if(window.Android) Android.onMapError(); };
-  document.head.appendChild(s);
-}
-</script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="__leafletFallback()"></script>
+<script>__LEAFLET_JS__</script>
 </head><body><div id="map"></div>
 <script>
 var ZONES = __ZONES__;
@@ -190,6 +194,7 @@ function initMap(){
   });
   makeArrows();
   requestAnimationFrame(tick);
+  window.__mapReady = true;
 }
 function makeArrows(){
   var i, lat, lon;
@@ -234,14 +239,16 @@ function selectZone(name){
     var d = el.querySelector('.znum'); if(d) d.classList.toggle('sel', k===name);
   });
 }
-if(typeof L !== 'undefined'){ initMap(); } else { __leafletFallback(); }
+initMap();
 window.addEventListener('load', function(){
-  setTimeout(function(){ if(typeof L === 'undefined' && window.Android) Android.onMapError(); }, 4000);
+  setTimeout(function(){ if(map === null && window.Android) Android.onMapError(); }, 4000);
 });
 </script></body></html>
 """
   return raw
     .replace("__ZONES__", zonesJson)
+    .replace("__LEAFLET_CSS__", leafletCss)
+    .replace("__LEAFLET_JS__", leafletJs)
     .replace("__LAT__", lat.toString())
     .replace("__LON__", lon.toString())
     .replace("__DIR__", dir.toString())

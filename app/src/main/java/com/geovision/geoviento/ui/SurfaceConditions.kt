@@ -22,9 +22,13 @@ fun AfternoonWarning(report: WindReport, limit: Double) {
   val firstBad = afternoon.firstOrNull { it.gust10 >= limit * 0.75 }
   if (firstBad == null) return
   val hour = firstBad.time.substringAfter("T").substringBefore(":")
+  // Dirección de la tarde POR DATOS (v1.2.2): antes decía fijo
+  // "noroeste", el patrón de Tuxtla; en otra ciudad era información
+  // incorrecta. Solo se habla de giro si la tarde cambia > 45°.
+  val turn = kotlin.math.abs((firstBad.dir10 - report.now.dir10 + 540) % 360 - 180) > 45
   Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))) {
     Column(Modifier.padding(12.dp)) {
-      Text("Ojo con la tarde: el viento gira al noroeste y se acelera desde las $hour:00.", fontWeight = FontWeight.Bold)
+      Text(if (turn) "Ojo con la tarde: el viento gira al ${compass(firstBad.dir10)} y se acelera desde las $hour:00." else "Ojo con la tarde: el viento se acelera desde las $hour:00.", fontWeight = FontWeight.Bold)
       Text("Si tu trabajo es foto de terrenos o tour 360°, programa el vuelo antes del mediodía y deja la tarde para editar.", style = MaterialTheme.typography.bodySmall)
     }
   }

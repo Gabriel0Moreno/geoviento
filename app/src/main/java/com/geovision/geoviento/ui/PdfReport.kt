@@ -32,14 +32,29 @@ object PdfReport {
   ): Uri? {
     return try {
       val doc = PdfDocument()
-      val pageInfo = PdfDocument.PageInfo.Builder(595, 842, 1).create()
-      val page = doc.startPage(pageInfo)
-      val canvas = page.canvas
+      // Paginación (v1.2.2): en la v1.2.1 el informe era de UNA sola página
+      // y la tabla hora por hora se cortaba a las ~18 filas (y > 790 -> break)
+      // y las líneas de referencia y checklist quedaban FUERA de la página.
+      // Ahora se abre una página nueva cuando el contenido ya no cabe y
+      // todo sale completo, aunque ocupe dos páginas.
+      var pageNo = 1
+      var page = doc.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNo).create())
+      var canvas = page.canvas
       val title = Paint().apply { textSize = 22f; isFakeBoldText = true }
       val head = Paint().apply { textSize = 15f; isFakeBoldText = true }
       val body = Paint().apply { textSize = 12f }
       var y = 60f
-      fun line(text: String, paint: Paint = body) { canvas.drawText(text, 40f, y, paint); y += 22f }
+      fun newPage() {
+        doc.finishPage(page)
+        pageNo++
+        page = doc.startPage(PdfDocument.PageInfo.Builder(595, 842, pageNo).create())
+        canvas = page.canvas
+        y = 60f
+      }
+      fun line(text: String, paint: Paint = body) {
+        if (y > 790f) newPage()
+        canvas.drawText(text, 40f, y, paint); y += 22f
+      }
       val hourly = day?.hourly ?: report.hourly
       val chosen = hourly.firstOrNull { it.time.substringAfter("T").startsWith(hour) } ?: hourly.firstOrNull()
       val factor = logWindFactor(altitudeM.toDouble())
@@ -68,7 +83,6 @@ object PdfReport {
       line("Tabla hora por hora:", head)
       for (p in hourly.take(24)) {
         line("  " + p.time.substringAfter("T").substringBefore(":") + ":00  viento %.1f m/s  ráfaga %.1f m/s  dir %s".format(p.speed10, p.gust10, compass(p.dir10)))
-        if (y > 790f) break
       }
       y += 8f
       if (weekRef.size >= 4) {

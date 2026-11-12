@@ -316,6 +316,11 @@ class MainActivity : ComponentActivity() {
           Spacer(Modifier.height(12.dp))
 
           // 3) Brújula + dirección.
+          // Giro de la tarde POR DATOS (v1.2.2): antes decía fijo "gira
+          // al NO", el patrón de Tuxtla; en otra ciudad era información
+          // incorrecta. Solo se muestra si la tarde gira más de 45°.
+          val aftPoint = report.hourly.filter { (it.time.substringAfter("T").substringBefore(":").toIntOrNull() ?: 0) in 15..18 }.maxByOrNull { it.gust10 }
+          val aftTurnDir = aftPoint?.takeIf { kotlin.math.abs((it.dir10 - n.dir10 + 540) % 360 - 180) > 45 }?.dir10
           Card(Modifier.fillMaxWidth()) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
               WindCompass(n.dir10)
@@ -325,7 +330,7 @@ class MainActivity : ComponentActivity() {
                 Text("Viene del %s (%.0f°)".format(compass(n.dir10), n.dir10))
                 Text("El aire va hacia el %s".format(compass((n.dir10 + 180.0) % 360.0)))
                 Text("A 120 m viene del %s".format(n.dir120?.let { compass(it) } ?: "—"))
-                Text("Por la tarde el viento suele girar al NO.", style = MaterialTheme.typography.bodySmall)
+                if (aftTurnDir != null) Text("Por la tarde el viento gira al ${compass(aftTurnDir)}.", style = MaterialTheme.typography.bodySmall)
               }
             }
           }
@@ -377,6 +382,11 @@ class MainActivity : ComponentActivity() {
             Text("En la boca del cañón, la canalización puede subir la ráfaga local a ≈ %.1f m/s.".format(mapGust * 1.45), style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(8.dp))
             ZoneCards(selectedZone) { selectedZone = it }
+          } else {
+            // En otra ciudad las zonas, el relieve y el cañón son de
+            // Tuxtla y no aplican: se explica en vez de que la
+            // información "desaparezca" sin más (v1.2.2).
+            Text("Las 5 zonas numeradas y el corte del relieve son de Tuxtla Gutiérrez; aquí el mapa muestra las calles y las flechas de este lugar.", style = MaterialTheme.typography.bodySmall)
           }
           Spacer(Modifier.height(12.dp))
 
@@ -403,7 +413,10 @@ class MainActivity : ComponentActivity() {
           // 10) Informe técnico de vuelo en PDF — como en la demo.
           Text("Informe técnico de vuelo en PDF", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
           Text("HOY O UN DÍA PASADO · CUALQUIER UBICACIÓN", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-          Text("Elige la ubicación y el día, consulta los datos y descarga el informe PDF listo para guardar junto a tu bitácora de vuelo. Para hoy usa el pronóstico de Open-Meteo junto con el archivo histórico de Open-Meteo (ERA5). El PDF incluye datos de la hora elegida, tabla hora por hora, viento estimado a tu altura, la orientación de las corrientes: de dónde viene el aire, hacia dónde se mueve y cómo lo modifican el Cañón del Sumidero y la Meseta de Copoya.", style = MaterialTheme.typography.bodySmall)
+          // La mención al cañón y la meseta solo aplica si el informe es
+          // de Tuxtla; en otra ciudad sería información incorrecta (v1.2.2).
+          val pdfIsTuxtla = (pdfLat.toDoubleOrNull()?.let { kotlin.math.abs(it - 16.75) < 0.5 } ?: false) && (pdfLon.toDoubleOrNull()?.let { kotlin.math.abs(it - (-93.11)) < 0.5 } ?: false)
+          Text("Elige la ubicación y el día, consulta los datos y descarga el informe PDF listo para guardar junto a tu bitácora de vuelo. Para hoy usa el pronóstico de Open-Meteo junto con el archivo histórico de Open-Meteo (ERA5). El PDF incluye datos de la hora elegida, tabla hora por hora, viento estimado a tu altura, la orientación de las corrientes: de dónde viene el aire y hacia dónde se mueve" + if (pdfIsTuxtla) " y cómo lo modifican el Cañón del Sumidero y la Meseta de Copoya." else ".", style = MaterialTheme.typography.bodySmall)
           Spacer(Modifier.height(8.dp))
           Text("Ubicación del vuelo", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
           Text("Sitio seleccionado: $pdfPlace", style = MaterialTheme.typography.bodySmall)
