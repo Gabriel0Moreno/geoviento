@@ -1,5 +1,15 @@
 # Changelog — GeoViento
 
+## [1.1.3] - 2026-11-11
+- La 1.1.2 se cerraba al entrar SIN dejar geoviento-crash.txt: el handler de
+  Java de la v1.0.4 solo atrapa excepciones de Java, no fallos nativos. El
+  sospechoso es el mapa real de MapLibre, que en la 1.1.2 se creaba al abrir
+  (su inicialización nativa puede tumbar la app antes de que el handler
+  pueda guardar nada). Ahora el mapa real es BAJO DEMANDA: al abrir se ve el
+  esquema de siempre y un botón "Cargar mapa real con calles" lo activa solo
+  cuando Gabo lo pide. Si al tocarlo se cierra, queda confirmado que es el
+  mapa; si no, la app ya abre con toda la interfaz de la demo.
+
 ## [1.1.2] - 2026-11-11
 - La 1.1.1 seguía sin compilar (run #66): los imports de MapLibre ya estaban
   bien, pero las tarjetas de zonas de RealMap.kt tenían tres errores: (1) el
