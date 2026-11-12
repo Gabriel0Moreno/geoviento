@@ -62,8 +62,9 @@ private fun daylight(sunrise: String?, sunset: String?): String {
   }
 }
 
-// Condiciones en superficie de la demo: dirección, semáforo, humedad,
-// presión, probabilidad de lluvia, UV, amanecer/atardecer y calidad del aire.
+// Condiciones en superficie de la demo: semáforo, humedad, presión,
+// probabilidad de lluvia, UV, amanecer/atardecer y calidad del aire.
+// (La dirección ya está en la brújula, no se repite aquí.)
 @Composable
 fun SurfaceConditions(report: WindReport, limit: Double) {
   val n = report.now
@@ -80,9 +81,6 @@ fun SurfaceConditions(report: WindReport, limit: Double) {
     FlightLevel.YELLOW -> "AMARILLO"
     FlightLevel.RED -> "ROJO"
   }
-  val afternoonDir = report.hourly.firstOrNull {
-    (it.time.substringAfter("T").substringBefore(":").toIntOrNull() ?: 0) >= 15
-  }?.dir10
   val maxPrecip = report.hourly.mapNotNull { it.precipProb }.maxOrNull()
   val maxPrecipHour = report.hourly.firstOrNull { it.precipProb == maxPrecip }?.time?.substringAfter("T")?.substringBefore(":")
   val uv = s?.uvIndex
@@ -103,10 +101,9 @@ fun SurfaceConditions(report: WindReport, limit: Double) {
     else -> "Dañina"
   }
   Text("Condiciones en superficie", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-  Text("Estación Tuxtla · ahora", style = MaterialTheme.typography.bodySmall)
+  Text("Ahora", style = MaterialTheme.typography.bodySmall)
   Spacer(Modifier.height(8.dp))
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    SurfaceTile("DIRECCIÓN", "${compass(n.dir10)} ${n.dir10.toInt()}°", afternoonDir?.let { "Por la tarde gira a ${compass(it)} (${it.toInt()}°)" } ?: "—", Modifier.weight(1f))
     SurfaceTile("SEMÁFORO AHORA", levelName, "%.1f m/s está %s del límite".format(n.gust10, if (level == FlightLevel.GREEN) "muy debajo" else "cerca"), Modifier.weight(1f), levelColor)
   }
   Spacer(Modifier.height(8.dp))

@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.util.Log
@@ -35,6 +36,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
+import com.geovision.geoviento.BuildConfig
 import com.geovision.geoviento.data.DRONES
 import com.geovision.geoviento.data.HourlyPoint
 import com.geovision.geoviento.data.WindReport
@@ -42,24 +44,51 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.text.SimpleDateFormat
 import java.time.LocalDate
+import java.util.Date
+import java.util.Locale
+import kotlin.math.abs
 
 class MainActivity : ComponentActivity() {
   // Tuxtla por defecto si aún no hay GPS: 16.75, -93.11
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    // Si la app se vuelve a cerrar, el error exacto queda guardado en
-    // Descargas/geoviento-crash.txt para poder diagnosticarlo sin computadora.
+    // PERMANENTE (Gabo, 2026-11-11): si la app se cierra de forma
+    // inesperada, el error exacto queda guardado en un txt, SIEMPRE. No
+    // quitar en versiones futuras. Guarda en el almacenamiento interno de
+    // la app (ahí siempre se puede escribir, con nombre por fecha para no
+    // pisar el anterior) y una copia en Descargas. OJO: esto solo atrapa
+    // errores de la app en Java/Kotlin; un fallo NATIVO (como el del mapa
+    // MapLibre, que nunca dejó archivo) no lo puede atrapar nadie desde
+    // aquí, por eso el mapa ya no usa código nativo.
     val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
     Thread.setDefaultUncaughtExceptionHandler { thread, e ->
       try {
-        val text = "Geoviento crash\n" + Log.getStackTraceString(e)
-        val values = ContentValues().apply {
-          put(MediaStore.Downloads.DISPLAY_NAME, "geoviento-crash.txt")
-          put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+        val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
+        val fileName = "geoviento-crash-$stamp.txt"
+        val text = buildString {
+          appendLine("Geoviento Mx — cierre inesperado")
+          appendLine("Fecha: $stamp")
+          appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+          appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+          appendLine("Teléfono: ${Build.MANUFACTURER} ${Build.MODEL}")
+          appendLine("Hilo: ${thread.name}")
+          appendLine("Último estado: ${CrashLog.lastState}")
+          appendLine("Error:")
+          appendLine(Log.getStackTraceString(e))
         }
-        val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-        uri?.let { contentResolver.openOutputStream(it)?.use { os -> os.write(text.toByteArray()) } }
+        val dir = File(filesDir, "crashes").apply { mkdirs() }
+        File(dir, fileName).writeText(text)
+        try {
+          val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+            put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+          }
+          val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+          uri?.let { contentResolver.openOutputStream(it)?.use { os -> os.write(text.toByteArray()) } }
+        } catch (_: Exception) { /* la copia interna ya quedó guardada */ }
       } catch (_: Exception) { /* si no se puede guardar, el cierre sigue su curso */ }
       previousHandler?.uncaughtException(thread, e)
     }
@@ -94,8 +123,20 @@ class MainActivity : ComponentActivity() {
       val focusManager = LocalFocusManager.current
       var lat by remember { mutableStateOf(16.75) }
       var lon by remember { mutableStateOf(-93.11) }
+      // Nombre del lugar principal (arriba): cambia con la búsqueda o el GPS.
+      var placeName by remember { mutableStateOf("Tuxtla Gutiérrez, Chiapas") }
+      var mainQuery by remember { mutableStateOf("") }
+      val mainPlaces by vm.mainPlaces.collectAsState()
       var hasPermission by remember { mutableStateOf(false) }
       val scope = rememberCoroutineScope()
+
+      fun useGps() {
+        if (hasPermission) {
+          loadGps(fused, { la, lo -> lat = la; lon = lo; placeName = "Mi ubicación actual" }, { vm.refresh(lat, lon) })
+        } else {
+          perm.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+      }
 
       // Permiso de ubicación después del primer frame (no en onCreate),
       // y la primera carga con la ubicación por defecto de Tuxtla.
@@ -105,7 +146,7 @@ class MainActivity : ComponentActivity() {
         focusManager.clearFocus()
         onPermission = { granted ->
           hasPermission = granted
-          if (granted) loadGps(fused, { la, lo -> lat = la; lon = lo }, { vm.refresh(lat, lon) })
+          if (granted) useGps()
         }
         perm.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         vm.refresh(lat, lon)
@@ -137,10 +178,18 @@ class MainActivity : ComponentActivity() {
       var pdfHour by remember { mutableStateOf("08:00") }
       var pdfAltitude by remember { mutableStateOf(60) }
 
+      // Último estado conocido, para el txt de cierre (ver onCreate).
+      LaunchedEffect(rep, origin) {
+        CrashLog.lastState = "origen=$origin, fuente=${rep.source}, hora=${rep.now.time}, ráfaga=${rep.now.gust10} m/s, lugar=$lat,$lon ($placeName)"
+      }
+
       // La interfaz SIEMPRE se ve: si aún no hay datos en vivo, se muestra el
       // ejemplo de la demo (marcado) o los datos guardados. Nunca pantalla blanca.
       val report: WindReport = rep
       val limit = drone.limit
+      // Las zonas, el relieve y el cañón son de Tuxtla: solo se muestran
+      // cuando el lugar principal está cerca de Tuxtla.
+      val isTuxtla = abs(lat - 16.75) < 0.5 && abs(lon - (-93.11)) < 0.5
       MaterialTheme {
         // Tocar en cualquier parte vacía esconde el teclado.
         Column(
@@ -149,8 +198,29 @@ class MainActivity : ComponentActivity() {
         ) {
           // Encabezado de marca (como en la demo).
           Text("Geoviento Mx — Viento para dron", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFF0A2E4D))
-          Text("TUXTLA GUTIÉRREZ, CHIAPAS · %.3f° N, %.3f° O · %s M S. N. M.".format(lat, -lon, report.surface?.elevation?.let { "%.0f".format(it) } ?: "535"), style = MaterialTheme.typography.bodySmall)
+          Text("${placeName.uppercase(Locale.getDefault())} · %.3f° N, %.3f° O · %s M S. N. M.".format(lat, -lon, report.surface?.elevation?.let { "%.0f".format(it) } ?: "535"), style = MaterialTheme.typography.bodySmall)
           Text("Datos consultados: " + (report.now.time ?: "—") + "  •  Fuente: " + report.source, style = MaterialTheme.typography.bodySmall)
+          // Ubicación principal cambiable: busca un lugar por nombre o usa el GPS.
+          OutlinedTextField(
+            value = mainQuery, onValueChange = { mainQuery = it },
+            label = { Text("Buscar lugar para el viento") },
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+          )
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.searchMainPlaces(mainQuery); focusManager.clearFocus() }) { Text("Buscar") }
+            OutlinedButton(onClick = { useGps() }) { Text("Mi ubicación") }
+          }
+          mainPlaces.forEach { p ->
+            TextButton(onClick = {
+              placeName = if (p.detail.isBlank()) p.name else "${p.name}, ${p.detail}"
+              lat = p.lat; lon = p.lon
+              vm.mainPlaces.value = emptyList()
+              vm.refresh(lat, lon)
+              focusManager.clearFocus()
+            }) { Text("${p.name} — ${p.detail}") }
+          }
           if (!hasPermission) Text("Sin permiso de ubicación: se usan las coordenadas de Tuxtla.", style = MaterialTheme.typography.bodySmall)
           if (loading) Text("Actualizando…", style = MaterialTheme.typography.bodySmall)
           Spacer(Modifier.height(12.dp))
@@ -212,8 +282,7 @@ class MainActivity : ComponentActivity() {
               Text(level.label, color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
               Text("Ráfaga 10 m: %.1f m/s (%.0f km/h)".format(n.gust10, kmh(n.gust10)), color = Color.White, style = MaterialTheme.typography.titleMedium)
               Text(level.advice, color = Color.White)
-              Text("Límite ${drone.name}: %.1f m/s. La ráfaga manda, no el viento medio.".format(limit), color = Color.White, style = MaterialTheme.typography.bodySmall)
-              Text(bestWindowText(report.hourly, limit), color = Color.White, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+              Text("La ráfaga manda, no el viento medio.", color = Color.White, style = MaterialTheme.typography.bodySmall)
             }
           }
           Spacer(Modifier.height(8.dp))
@@ -234,11 +303,7 @@ class MainActivity : ComponentActivity() {
           Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard("Viento sostenido", "%.1f m/s".format(n.speed10), "%.0f km/h  •  %s %.0f°".format(kmh(n.speed10), compass(n.dir10), n.dir10), Modifier.weight(1f))
             StatCard("Ráfaga máxima de hoy", "%.1f m/s".format(report.surface?.gustMaxToday ?: n.gust10), "%.0f km/h".format(kmh(report.surface?.gustMaxToday ?: n.gust10)), Modifier.weight(1f))
-          }
-          Spacer(Modifier.height(8.dp))
-          Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCard("Temperatura", n.temp?.let { "%.1f °C".format(it) } ?: "—", "Máxima de hoy: " + (report.surface?.tempMaxToday?.let { "%.0f °C".format(it) } ?: "—"), Modifier.weight(1f))
-            StatCard("Límite — ${drone.name}", "%.1f m/s".format(limit), "Resistencia al viento de referencia", Modifier.weight(1f))
           }
           Spacer(Modifier.height(12.dp))
 
@@ -276,7 +341,11 @@ class MainActivity : ComponentActivity() {
 
           // 6) Mapa real con corrientes y zonas — como en la demo.
           Text("Mapa: zonas de vuelo y relieve", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-          Text("El valle de Tuxtla corre de oeste a este entre la Meseta de Copoya (sur) y la entrada del Cañón del Sumidero (norte). Con viento del norte y noroeste, el cañón canaliza el aire hacia la ciudad y la meseta genera turbulencia en su lado protegido. La herramienta de corrientes dibuja el flujo directamente sobre el mapa, hora por hora: elige la hora y sigue las flechas. Toca una zona para ubicarla en el mapa.", style = MaterialTheme.typography.bodySmall)
+          if (isTuxtla) {
+            Text("El valle de Tuxtla corre de oeste a este entre la Meseta de Copoya (sur) y la entrada del Cañón del Sumidero (norte). Con viento del norte y noroeste, el cañón canaliza el aire hacia la ciudad y la meseta genera turbulencia en su lado protegido. La herramienta de corrientes dibuja el flujo directamente sobre el mapa, hora por hora: elige la hora y sigue las flechas. Toca una zona para ubicarla en el mapa.", style = MaterialTheme.typography.bodySmall)
+          } else {
+            Text("Mapa real con las corrientes de viento sobre las calles de este lugar, hora por hora: elige la hora y sigue las flechas.", style = MaterialTheme.typography.bodySmall)
+          }
           Spacer(Modifier.height(8.dp))
           val hourPoint: HourlyPoint? = if (selectedHour in report.hourly.indices) report.hourly[selectedHour] else null
           val mapDir = hourPoint?.dir10 ?: n.dir10
@@ -304,17 +373,18 @@ class MainActivity : ComponentActivity() {
             Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) { Text("Corrientes ocultas") }
           }
           Spacer(Modifier.height(8.dp))
-          val flowHour = hourPoint?.let { hourLabel(it.time) } ?: "Ahora"
-          Text("$flowHour: Viento desde el ${compass(mapDir)} (${mapDir.toInt()}°), el aire se mueve hacia el ${compass((mapDir + 180) % 360)}. Sostenido %.1f m/s, ráfaga %.1f m/s. En la boca del cañón, la canalización puede subir la ráfaga local a ≈ %.1f m/s.".format(n.speed10, mapGust, mapGust * 1.45), style = MaterialTheme.typography.bodySmall)
-          Text("Flecha = hacia dónde se mueve el aire  •  Verde < %.1f m/s  •  Amarillo %.1f–%.1f m/s  •  Rojo ≥ %.1f m/s".format(limit * 0.75, limit * 0.75, limit, limit), style = MaterialTheme.typography.bodySmall)
-          Text("Capa esquemática a partir de la dirección y la ráfaga del pronóstico de hoy: no es una medición en sitio.", style = MaterialTheme.typography.bodySmall)
-          Spacer(Modifier.height(8.dp))
-          ZoneCards(selectedZone) { selectedZone = it }
+          if (isTuxtla) {
+            Text("En la boca del cañón, la canalización puede subir la ráfaga local a ≈ %.1f m/s.".format(mapGust * 1.45), style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            ZoneCards(selectedZone) { selectedZone = it }
+          }
           Spacer(Modifier.height(12.dp))
 
-          // 7) Cómo se mueve el aire sobre el relieve — como en la demo.
-          ReliefSection()
-          Spacer(Modifier.height(12.dp))
+          // 7) Cómo se mueve el aire sobre el relieve — como en la demo (solo Tuxtla).
+          if (isTuxtla) {
+            ReliefSection()
+            Spacer(Modifier.height(12.dp))
+          }
 
           // 8) Calculadora de viento por altura — como en la demo.
           AltitudeCalculator(report, limit) {}
@@ -382,7 +452,6 @@ class MainActivity : ComponentActivity() {
             }
           }
           Slider(value = pdfAltitude.toFloat(), onValueChange = { pdfAltitude = it.toInt().coerceIn(10, 120) }, valueRange = 10f..120f)
-          Text("Tu dron (límite por ráfaga): ${drone.name} — límite %.1f m/s".format(limit), style = MaterialTheme.typography.bodySmall)
           if (weekRef.size >= 4) {
             Text("Referencia rápida del archivo: en los últimos 7 días la ráfaga máxima diaria fue de %.1f a %.1f m/s, con viento dominante del %.0f° al %.0f° — en rojo para un dron de menos de 249 g.".format(weekRef[0], weekRef[1], weekRef[2], weekRef[3]), style = MaterialTheme.typography.bodySmall)
           }
@@ -429,7 +498,6 @@ class MainActivity : ComponentActivity() {
           // Pie: fuentes y nota de seguridad (como en la demo).
           Text("Fuentes de los datos: Open-Meteo (pronóstico y archivo histórico ERA5) y met.no (respaldo). Calidad del aire: Open-Meteo Air Quality.", style = MaterialTheme.typography.bodySmall)
           Text("Esta app muestra las condiciones al momento de la consulta, pensada para planear el día. El viento puede cambiar en minutos: antes de cada despegue, vuelve a revisar la fuente en vivo. Ante cualquier duda, la decisión segura es no volar.", style = MaterialTheme.typography.bodySmall)
-          Text("Umbrales del semáforo aplicados a ${drone.name} (límite %.1f m/s): verde < %.1f m/s, amarillo %.1f–%.1f m/s, rojo ≥ %.1f m/s, aplicados sobre la ráfaga.".format(limit, limit * 0.75, limit * 0.75, limit, limit), style = MaterialTheme.typography.bodySmall)
           Spacer(Modifier.height(12.dp))
 
           err?.let {
@@ -443,7 +511,7 @@ class MainActivity : ComponentActivity() {
             Spacer(Modifier.height(12.dp))
           }
           Button(onClick = { vm.refresh(lat, lon) }, enabled = !loading) { Text("Actualizar ahora") }
-          Text("Se actualiza solo cada 15 min. La ráfaga manda, no el viento medio.", style = MaterialTheme.typography.bodySmall)
+          Text("Se actualiza solo cada 15 min.", style = MaterialTheme.typography.bodySmall)
         }
       }
     }
@@ -463,18 +531,9 @@ private fun hourLabel(time: String): String {
   return if (h.length == 2) "$h:00" else time
 }
 
-private fun bestWindowText(hourly: List<HourlyPoint>, limit: Double): String {
-  val green = limit * 0.75
-  var bestStart = -1; var bestLen = 0; var curStart = -1; var curLen = 0
-  for ((i, p) in hourly.take(24).withIndex()) {
-    if (p.gust10 < green) {
-      if (curStart == -1) { curStart = i; curLen = 1 } else curLen++
-      if (curLen > bestLen) { bestLen = curLen; bestStart = curStart }
-    } else { curStart = -1; curLen = 0 }
-  }
-  if (bestStart < 0 || bestLen < 2) return "Sin ventana verde larga en las próximas 24 h: vigila la ráfaga hora por hora."
-  if (bestLen >= 24) return "Todo el día en verde (ráfaga < %.1f m/s).".format(green)
-  return "Mejor ventana: " + hourLabel(hourly[bestStart].time) + "–" + hourLabel(hourly[(bestStart + bestLen - 1).coerceAtMost(23)].time) + " (ráfaga < %.1f m/s).".format(green)
+// Último estado conocido de la app, para el txt de cierre (ver onCreate).
+object CrashLog {
+  @Volatile var lastState: String = "sin datos todavía"
 }
 
 @Composable

@@ -4,15 +4,24 @@
 // cargarlo ("Geoviento Mx continúa fallando" tras "Cargando mapa...") con
 // un fallo NATIVO que el handler de Java no atrapa: nunca dejó
 // geoviento-crash.txt. El WebView no tiene código nativo propio, así que
-// no puede tumbar la app de esa forma; si la página no carga (sin
-// internet o CDN caído) se muestra el esquema Canvas de antes.
-// La demo web usa este mismo mapa Leaflet y ya funciona en el teléfono.
+// no puede tumbar la app de esa forma; si la página no carga se muestra
+// el esquema Canvas de antes. La demo web usa este mismo mapa Leaflet y
+// ya funciona en el teléfono.
+//
+// Por qué en la v1.1.6 el mapa se veía en blanco: Leaflet se cargaba de un
+// solo CDN (unpkg); si ese CDN no responde, la página nunca termina de
+// cargar, el evento `load` nunca se dispara y el mapa queda en blanco sin
+// error. Ahora hay DOS CDN (unpkg y jsdelivr) y una verificación con
+// tiempo límite desde Kotlin: si Leaflet no existe a los 8 s, cae al
+// esquema. Además onRenderProcessGone evita que un fallo del renderizador
+// del WebView cierre la app: muestra el esquema en su lugar.
 package com.geovision.geoviento.ui
 
 import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -90,10 +99,27 @@ fun WebMap(
             override fun onPageFinished(view: WebView, url: String) {
               pageLoaded = true
               view.evaluateJavascript("updateWind($dir, $gust)", null)
+              // Verificación con tiempo límite: si el CDN se quedó colgado,
+              // la página "termina" pero Leaflet nunca existió. A los 8 s
+              // se comprueba y, si no hay Leaflet, cae al esquema.
+              Handler(Looper.getMainLooper()).postDelayed({
+                if (!webFailed) {
+                  view.evaluateJavascript("typeof L") { result ->
+                    if (result == "\"undefined\"") webFailed = true
+                  }
+                }
+              }, 8000)
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
               if (request.isForMainFrame) webFailed = true
+            }
+
+            // Si el proceso del WebView muere, no se cierra la app: se
+            // muestra el esquema y listo.
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+              webFailed = true
+              return true
             }
           }
           loadDataWithBaseURL("https://tile.openstreetmap.org/", html, "text/html", "utf-8", null)
@@ -132,24 +158,39 @@ private fun buildWebMapHtml(zonesJson: String, lat: Double, lon: Double, dir: Do
   val raw = """
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>html,body{margin:0;height:100%}#map{height:100%;width:100%}.znum{background:#0A2E4D;color:#fff;border:2px solid #fff;border-radius:50%;width:26px;height:26px;line-height:22px;text-align:center;font-weight:bold;font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.4)}.znum.sel{background:#B3261E}.zlab{background:rgba(255,255,255,.92);border-radius:4px;padding:1px 5px;font-size:11px;font-weight:bold;white-space:nowrap}.arr{font-size:22px;line-height:1;text-shadow:0 0 3px #fff,0 0 3px #fff}</style>
+<script>
+function __leafletFallback(){
+  if(typeof L !== 'undefined'){ initMap(); return; }
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+  s.onload=function(){ initMap(); };
+  s.onerror=function(){ if(window.Android) Android.onMapError(); };
+  document.head.appendChild(s);
+}
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="__leafletFallback()"></script>
 </head><body><div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 var ZONES = __ZONES__;
 var DIR = __DIR__; var GUST = __GUST__; var LIMIT = __LIMIT__;
 var paused = false; var intensity = 1;
-var map = L.map('map', {zoomControl:false}).setView([__LAT__, __LON__], 12);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
-var zoneMarkers = {};
-ZONES.forEach(function(z){
-  var m = L.marker([z.lat, z.lon], {icon: L.divIcon({className:'', html:'<div class="znum" id="zn-'+z.n+'">'+z.n+'</div>', iconSize:[26,26], iconAnchor:[13,13]})}).addTo(map);
-  m.bindTooltip(z.name, {permanent:true, direction:'top', offset:[0,-14], className:'zlab'});
-  m.on('click', function(){ if(window.Android) Android.onZoneSelected(z.name); selectZone(z.name); });
-  zoneMarkers[z.name] = m;
-});
+var map = null; var zoneMarkers = {}; var arrows = [];
 function flowColor(g){ return g < LIMIT*0.75 ? '#1B7A3D' : (g < LIMIT ? '#B8860B' : '#B3261E'); }
-var arrows = [];
+function initMap(){
+  if(typeof L === 'undefined' || map !== null) return;
+  map = L.map('map', {zoomControl:false}).setView([__LAT__, __LON__], 12);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+  ZONES.forEach(function(z){
+    var m = L.marker([z.lat, z.lon], {icon: L.divIcon({className:'', html:'<div class="znum" id="zn-'+z.n+'">'+z.n+'</div>', iconSize:[26,26], iconAnchor:[13,13]})}).addTo(map);
+    m.bindTooltip(z.name, {permanent:true, direction:'top', offset:[0,-14], className:'zlab'});
+    m.on('click', function(){ if(window.Android) Android.onZoneSelected(z.name); selectZone(z.name); });
+    zoneMarkers[z.name] = m;
+  });
+  makeArrows();
+  requestAnimationFrame(tick);
+}
 function makeArrows(){
   var i, lat, lon;
   for(i=0;i<14;i++){
@@ -160,6 +201,7 @@ function makeArrows(){
   paintArrows();
 }
 function paintArrows(){
+  if(map === null) return;
   var c = flowColor(GUST);
   arrows.forEach(function(a){
     var el = a.m.getElement(); if(!el) return;
@@ -170,11 +212,10 @@ function paintArrows(){
     d.style.fontSize = (16 + 10*intensity) + 'px';
   });
 }
-makeArrows();
 var last = 0;
 function tick(ts){
   requestAnimationFrame(tick);
-  if(paused) return;
+  if(map === null || paused) return;
   if(!last) last = ts; var dt = Math.min(50, ts-last); last = ts;
   var toRad = DIR*Math.PI/180;
   var step = dt*0.00002*(0.5 + GUST/10);
@@ -184,7 +225,6 @@ function tick(ts){
     a.m.setLatLng([a.lat, a.lon]);
   });
 }
-requestAnimationFrame(tick);
 function updateWind(d, g){ DIR=d; GUST=g; paintArrows(); }
 function setPaused(b){ paused=b; }
 function setIntensity(x){ intensity=x; paintArrows(); }
@@ -194,6 +234,7 @@ function selectZone(name){
     var d = el.querySelector('.znum'); if(d) d.classList.toggle('sel', k===name);
   });
 }
+if(typeof L !== 'undefined'){ initMap(); } else { __leafletFallback(); }
 window.addEventListener('load', function(){
   setTimeout(function(){ if(typeof L === 'undefined' && window.Android) Android.onMapError(); }, 4000);
 });

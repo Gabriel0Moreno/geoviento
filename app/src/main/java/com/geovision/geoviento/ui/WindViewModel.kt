@@ -35,6 +35,9 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
   // Referencia del archivo: [mín, máx de ráfaga diaria 7 días, dir mín, dir máx].
   val weekRef = MutableStateFlow<List<Double>>(emptyList())
   val places = MutableStateFlow<List<PlaceResult>>(emptyList())
+  // Búsqueda de lugar para la UBICACIÓN PRINCIPAL (arriba): lista aparte
+  // de la del informe PDF para no mezclar los resultados.
+  val mainPlaces = MutableStateFlow<List<PlaceResult>>(emptyList())
 
   // Si algo inesperado escapa del try, termina en mensaje de error, nunca en cierre.
   private val handler = CoroutineExceptionHandler { _, e ->
@@ -89,6 +92,13 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
     viewModelScope.launch(handler) {
       if (query.length < 3) { places.value = emptyList(); return@launch }
       places.value = repo.searchPlace(query)
+    }
+  }
+
+  fun searchMainPlaces(query: String) {
+    viewModelScope.launch(handler) {
+      if (query.length < 3) { mainPlaces.value = emptyList(); return@launch }
+      mainPlaces.value = repo.searchPlace(query)
     }
   }
 
