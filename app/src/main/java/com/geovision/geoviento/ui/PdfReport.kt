@@ -58,7 +58,10 @@ object PdfReport {
         line("El aire se mueve hacia el %s.".format(compass((chosen.dir10 + 180) % 360)))
         line("Viento estimado a $altitudeM m: %.1f m/s (factor logarítmico ×%.2f)".format(chosen.speed10 * factor, factor))
         line("Ráfaga estimada a $altitudeM m: %.1f m/s".format(chosen.gust10 * factor))
-        line("En el Cañón del Sumidero la ráfaga local puede subir ~45%%: %.1f m/s.".format(chosen.gust10 * 1.45))
+        // La nota del cañón solo aplica cerca de Tuxtla.
+        if (lat in 15.75..17.75 && lon in -94.11..-92.11) {
+          line("En el Cañón del Sumidero la ráfaga local puede subir ~45%%: %.1f m/s.".format(chosen.gust10 * 1.45))
+        }
         line("Temperatura a esa hora: " + (chosen.temp10?.let { "%.1f °C".format(it) } ?: "—"))
       }
       y += 8f
