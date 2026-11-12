@@ -1,5 +1,13 @@
 # Changelog — GeoViento
 
+## [1.1.6] - 2026-11-11
+- LA 1.1.5 NO COMPILÓ (run #84): al borrar RealMap.kt me llevé también
+  dos cosas que otros archivos usaban — las tarjetas ZoneCards (que usa
+  MainActivity) y los datos de zonas que WebMap importaba con el nombre
+  viejo (la lista real es `data.ZONES`, con `elevM`, no `Tuxtla_ZONES`).
+  Corregido: ZoneCards vive ahora sola en ZoneCards.kt y WebMap importa
+  `data.ZONES` con los campos correctos. El mapa WebView en sí no cambió.
+
 ## [1.1.5] - 2026-11-11
 - EL MAPA REAL YA NO ES MAPLIBRE: el video de Gabo 22:15 CST muestra el
   cierre exacto — toca "Cargar mapa real", sale "Cargando mapa..." y aparece
