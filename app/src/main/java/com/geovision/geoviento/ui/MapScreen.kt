@@ -33,12 +33,10 @@ import kotlin.math.sqrt
 // Mapa de corrientes: ESQUEMA dibujado con Canvas (no son baldosas satelitales en
 // vivo). Muestra las 5 zonas de Tuxtla, el Cañón del Sumidero y flechas animadas
 // con la dirección real del viento. Tocar una zona muestra su nota.
-// El mapa con relieve y baldosas MapLibre queda para una siguiente versión;
-// este esquema no se cae sin internet de mapas.
-object MapStyle {
-  const val STYLE = "https://demotiles.maplibre.org/style.json"
-  const val TERRAIN_URL = "https://demotiles.maplibre.org/terrain-tiles/tiles.json"
-}
+// El mapa real con baldosas es un WebView (Leaflet + OSM) en WebMap.kt:
+// el mapa nativo MapLibre tumbaba la app al cargarlo con un fallo que el
+// handler de Java no atrapa. Este esquema es el respaldo si el WebView no
+// carga (sin internet de mapas).
 
 data class Zone(val name: String, val fx: Float, val fy: Float, val note: String)
 
