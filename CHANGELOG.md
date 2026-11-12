@@ -1,5 +1,15 @@
 # Changelog — GeoViento
 
+## [1.1.2] - 2026-11-11
+- La 1.1.1 seguía sin compilar (run #66): los imports de MapLibre ya estaban
+  bien, pero las tarjetas de zonas de RealMap.kt tenían tres errores: (1) el
+  `Card` con onClick pasaba el Modifier como primer argumento posicional y
+  Material3 lo interpretaba como el onClick; (2) el archivo importa
+  android.graphics.Color (para dibujar los bitmaps) y `Color(0xFF...)` se
+  resolvía a ese Color en vez de al de Compose; (3) faltaba el import de
+  FontWeight. Corregido: onClick nombrado primero, colores de Compose con su
+  ruta completa y FontWeight importado.
+
 ## [1.1.1] - 2026-11-11
 - LA 1.1.0 NO COMPILABA: `Unresolved reference 'maplibre'` en RealMap.kt.
   Causa exacta (verificada en el AAR descargado de Maven Central): el SDK
