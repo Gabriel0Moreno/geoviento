@@ -69,3 +69,28 @@ data class DayReport(val date: String, val hourly: List<HourlyPoint>, val maxGus
 
 // Lugar encontrado por nombre (geocodificación).
 data class PlaceResult(val name: String, val detail: String, val lat: Double, val lon: Double)
+
+// Perfil real del relieve (v1.2.3): alturas muestreadas sobre un corte de
+// 30 km centrado en el lugar elegido, en el eje del viento (de donde viene
+// el aire hacia donde va). Las alturas vienen de la API de elevación de
+// Open-Meteo, así que el relieve cambia con la ubicación, no es el esquema
+// fijo de Tuxtla.
+data class TerrainPoint(val km: Double, val elevM: Double)
+data class TerrainProfile(
+  val points: List<TerrainPoint>, // de -15 km (contra el viento) a +15 km (a favor)
+  val axisDirTo: Double,          // hacia dónde va el aire (grados, "to")
+  val elevAtLoc: Double,          // altura del lugar elegido
+  val minElev: Double, val maxElev: Double
+) {
+  val range: Double get() = maxElev - minElev
+  // Subida más fuerte entre dos muestras seguidas (1.5 km): el aire se ve
+  // obligado a subir ahí y detrás del filo se arremolina.
+  val maxClimb: Double get() = points.zipWithNext { a, b -> b.elevM - a.elevM }.maxOrNull() ?: 0.0
+  // Clasificación del terreno por el desnivel total del corte.
+  val kind: String get() = when {
+    range < 100 -> "Terreno llano"
+    range < 300 -> "Valle suave"
+    range < 600 -> "Terreno quebrado"
+    else -> "Zona montañosa"
+  }
+}

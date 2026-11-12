@@ -36,6 +36,7 @@ class WindRepository {
   private val archiveApi = retrofit("https://archive-api.open-meteo.com/").create(OpenMeteoArchiveApi::class.java)
   private val airApi = retrofit("https://air-quality-api.open-meteo.com/").create(AirQualityApi::class.java)
   private val geoApi = retrofit("https://geocoding-api.open-meteo.com/").create(GeocodingApi::class.java)
+  private val elevApi = retrofit("https://api.open-meteo.com/").create(ElevationApi::class.java)
   private val metNo = retrofit("https://api.met.no/").create(MetNoApi::class.java)
 
   // Diagnóstico de la última carga / prueba, para mostrarlo en la app.
@@ -170,6 +171,34 @@ class WindRepository {
       }
     } catch (_: Exception) {
       emptyList()
+    }
+  }
+
+  // Perfil del relieve (v1.2.3): 21 alturas sobre un corte de 30 km
+  // centrado en el lugar, en el eje del viento (de donde viene el aire
+  // hacia donde va). Devuelve null si la API no responde; la UI entonces
+  // no muestra el perfil en vez de inventar uno.
+  suspend fun fetchTerrain(lat: Double, lon: Double, dirFrom: Double): TerrainProfile? = withContext(Dispatchers.IO) {
+    try {
+      val dirTo = (dirFrom + 180) % 360
+      val rad = Math.toRadians(dirTo)
+      val lats = ArrayList<String>(21)
+      val lons = ArrayList<String>(21)
+      for (i in -10..10) {
+        val km = i * 1.5
+        // 1° de latitud ≈ 111.32 km; 1° de longitud ≈ 111.32 * cos(lat) km.
+        val dLat = km * Math.cos(rad) / 111.32
+        val dLon = km * Math.sin(rad) / (111.32 * Math.cos(Math.toRadians(lat)))
+        lats.add("%.5f".format(lat + dLat))
+        lons.add("%.5f".format(lon + dLon))
+      }
+      val elevs = elevApi.elevation(lats.joinToString(","), lons.joinToString(",")).elevation
+        ?: return@withContext null
+      if (elevs.size < 21) return@withContext null
+      val pts = elevs.mapIndexed { i, e -> TerrainPoint((i - 10) * 1.5, e) }
+      TerrainProfile(pts, dirTo, elevs[10], elevs.min(), elevs.max())
+    } catch (_: Exception) {
+      null
     }
   }
 
