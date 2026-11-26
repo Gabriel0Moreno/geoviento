@@ -72,6 +72,16 @@ val ZONES = listOf(
   ZoneInfo("Chiapa de Corzo", 16.7083, -93.0167, 420, "VALLE ABIERTO", "Valle del Grijalva, más abierto. La brisa del río puede sumar flujo local por la tarde: revisa el viento en sitio antes de despegar sobre el malecón.")
 )
 
+// Viento modelado en malla (v1.4.0): viento REAL medido por Open-Meteo
+// en una malla de 5x5 puntos alrededor del lugar (una sola consulta
+// multi-ubicación). Cada punto trae dirección y velocidad por hora
+// (72 h, zona America/Mexico_City), alineadas por la lista `times`.
+// Si la consulta falla, la malla es null y la app NO dibuja barbas:
+// nunca se copia el viento del centro a los demás puntos (eso sería
+// inventar datos espaciales).
+data class GridPoint(val lat: Double, val lon: Double, val dir: List<Double>, val speed: List<Double>, val gust: List<Double>)
+data class WindGrid(val times: List<String>, val points: List<GridPoint>)
+
 // Informe de un día (hoy con pronóstico, días pasados con archivo ERA5).
 data class DayReport(val date: String, val hourly: List<HourlyPoint>, val maxGust: Double, val maxGustHour: String?, val dominantDir: Double?, val source: String)
 

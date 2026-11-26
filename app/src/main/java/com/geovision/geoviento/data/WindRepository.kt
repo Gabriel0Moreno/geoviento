@@ -75,6 +75,40 @@ class WindRepository {
     }
   }
 
+  // Malla de viento modelado (v1.4.0): UNA consulta multi-ubicación a
+  // Open-Meteo con 25 puntos (malla 5x5, paso 0.06° ≈ 6.5 km, ±0.12°
+  // alrededor del lugar: ~27x26 km, lo que se ve en el mapa a zoom 12).
+  // Devuelve null si algo falla o la respuesta viene incompleta: la UI
+  // entonces esconde las barbas y avisa, sin dibujar datos falsos.
+  // Se pide con Retrofit como el resto del repositorio (nunca .body de
+  // OkHttp crudo: ese campo es package-private y no compila).
+  suspend fun fetchWindGrid(lat: Double, lon: Double): WindGrid? = withContext(Dispatchers.IO) {
+    try {
+      val lats = ArrayList<String>(25)
+      val lons = ArrayList<String>(25)
+      for (ri in -2..2) for (ci in -2..2) {
+        lats.add("%.4f".format(lat + ri * 0.06))
+        lons.add("%.4f".format(lon + ci * 0.06))
+      }
+      val res = api.forecastGrid(lats.joinToString(","), lons.joinToString(","))
+      if (res.size != 25) return@withContext null
+      val times = res[0].hourly?.time ?: return@withContext null
+      if (times.isEmpty()) return@withContext null
+      val pts = ArrayList<GridPoint>(25)
+      for (idx in res.indices) {
+        val h = res[idx].hourly ?: return@withContext null
+        val d = h.wind_direction_10m ?: return@withContext null
+        val s = h.wind_speed_10m ?: return@withContext null
+        val g = h.wind_gusts_10m ?: return@withContext null
+        if (d.size < times.size || s.size < times.size || g.size < times.size) return@withContext null
+        pts.add(GridPoint(lats[idx].toDouble(), lons[idx].toDouble(), d, s, g))
+      }
+      WindGrid(times, pts)
+    } catch (_: Exception) {
+      null
+    }
+  }
+
   // Diagnóstico de la última carga / prueba, para mostrarlo en la app.
   private val diagLock = Any()
   private val _diag = mutableListOf<DiagEntry>()

@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -31,7 +32,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.LocationServices
 import com.geovision.geoviento.BuildConfig
 import com.geovision.geoviento.data.WindReport
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -139,7 +143,10 @@ class MainActivity : ComponentActivity() {
       val terrain by vm.terrain.collectAsState()
       val terrainLoading by vm.terrainLoading.collectAsState()
       val radarFrames by vm.radarFrames.collectAsState()
+      val windGrid by vm.windGrid.collectAsState()
+      val gridFailed by vm.windGridFailed.collectAsState()
       val context = LocalContext.current
+      val scope = rememberCoroutineScope()
       val focusManager = LocalFocusManager.current
       var lat by remember { mutableStateOf(16.75) }
       var lon by remember { mutableStateOf(-93.11) }
@@ -280,7 +287,31 @@ class MainActivity : ComponentActivity() {
                   terrain = terrain,
                   terrainLoading = terrainLoading,
                   radarFrames = radarFrames,
-                  onRequestRadar = { vm.refreshRadar() }
+                  onRequestRadar = { vm.refreshRadar() },
+                  windGrid = windGrid,
+                  gridFailed = gridFailed,
+                  onRequestGrid = { vm.refreshWindGrid(lat, lon) },
+                  onBackToHome = { tab = Tab.HOME },
+                  // Descarga del informe PDF del punto y la hora elegidos
+                  // en el mapa: mismo generador que Más > Informe PDF
+                  // (PdfReport.generate), con la altura planeada de las
+                  // Preferencias y el dron elegido.
+                  onDownloadPdf = { hour ->
+                    scope.launch {
+                      val uri = withContext(Dispatchers.IO) {
+                        PdfReport.generate(context, report, vm.dayReport.value, lat, lon, placeName, hour, prefs.plannedAltitudeM, drone, vm.weekRef.value, checklist.all { it })
+                      }
+                      if (uri != null) {
+                        Toast.makeText(context, "Informe guardado en Descargas", Toast.LENGTH_LONG).show()
+                        try {
+                          val open = Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/pdf"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                          context.startActivity(open)
+                        } catch (_: Exception) { /* sin visor de PDF: el archivo ya quedó en Descargas */ }
+                      } else {
+                        Toast.makeText(context, "No se pudo generar el PDF", Toast.LENGTH_LONG).show()
+                      }
+                    }
+                  }
                 )
                 Tab.FORECAST -> ForecastScreen(
                   report = report,

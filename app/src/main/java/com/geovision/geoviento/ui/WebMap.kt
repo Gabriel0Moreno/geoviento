@@ -17,8 +17,8 @@
 // (una cadena de ~165 KB que el WebView puede no tragar) sino desde un
 // archivo en cacheDir con loadUrl("file://..."); (2) la verificación de
 // 8 s mira primero una señal NATIVA (contentHeight == 0 → la página no
-// se dibujó → esquema) y luego por JavaScript Leaflet, __mapReady y la
-// altura real del contenedor #map; (3) hay una línea de diagnóstico
+// se dibujó → esquema) y luego por JavaScript (Leaflet, __mapReady y la
+// altura real del contenedor #map); (3) hay una línea de diagnóstico
 // visible bajo el mapa con el resultado de la comprobación, para saber
 // en el teléfono qué falló sin adivinar.
 //
@@ -33,6 +33,21 @@
 // La capa "Clima" es un overlay de la app (nubosidad/precipitación de
 // Open-Meteo), no una tesela: el satélite de RainViewer venía vacío en
 // la respuesta del 2026-11-26 y no se puede depender de él.
+//
+// v1.4.0 (Gabo: "se ve horrible el mapa"): la base oscura se veía como
+// un vacío negro con 3 flechas amarillas sueltas. Nueva base CLARA con
+// relieve real (OpenTopoMap, con cadena de respaldo OpenTopoMap →
+// CartoDB Voyager → OSM, por conteo de errores de tesela como antes).
+// Las 14 flechas "➤" aleatorias que derivaban con animación SE
+// ELIMINARON: ahora hay barbas de viento REALES, una por punto de la
+// malla 5x5 de Open-Meteo (WindRepository.fetchWindGrid), estáticas, con
+// la dirección y la velocidad de cada punto para la hora elegida; si la
+// malla falla, no se dibuja nada (nunca se inventa viento espacial).
+// Marcadores de zona más discretos para el mapa claro (círculo teal
+// oscuro con número blanco, etiqueta clara) y un punto central en el
+// lugar elegido. El diagnóstico sale por onStatus para que MapTab lo
+// dibuje bajo el mapa. Todo lo demás sigue igual: verificación de 8 s,
+// radar animado, respaldo al esquema Canvas, nada de código nativo.
 package com.geovision.geoviento.ui
 
 import android.annotation.SuppressLint
@@ -45,16 +60,13 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.geovision.geoviento.data.ZONES
 import org.json.JSONArray
@@ -77,8 +89,8 @@ class ZoneBridge(
     main.post { onError() }
   }
 
-  // La base oscura no cargó y el mapa cambió solo a OSM: solo se anota,
-  // no es un error fatal y el mapa sigue.
+  // La base no cargó y el mapa cambió solo a la siguiente de la cadena:
+  // solo se anota, no es un error fatal y el mapa sigue.
   @JavascriptInterface
   fun onBaseLayer(name: String) {
     main.post { onBase(name) }
@@ -88,22 +100,22 @@ class ZoneBridge(
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebMap(
-  lat: Double, lon: Double, dir: Double, gust: Double, limit: Double,
-  playing: Boolean, intensity: Float, selectedZone: String?, onZone: (String) -> Unit,
+  lat: Double, lon: Double, selectedZone: String?, onZone: (String) -> Unit,
   fallback: @Composable () -> Unit,
   radarFrames: List<String> = emptyList(),
   radarVisible: Boolean = false,
   radarPlaying: Boolean = false,
-  arrowsVisible: Boolean = true
+  barbsVisible: Boolean = true,
+  barbHour: Int = -1,
+  gridJson: String? = null,
+  modifier: Modifier = Modifier,
+  onStatus: (String) -> Unit = {}
 ) {
   var webView by remember { mutableStateOf<WebView?>(null) }
   var pageLoaded by remember { mutableStateOf(false) }
   var webFailed by remember { mutableStateOf(false) }
-  // Diagnóstico visible del mapa (v1.2.4): qué encontró la comprobación,
-  // para saber en el teléfono qué falló sin adivinar.
-  var mapStatus by remember { mutableStateOf("Mapa: cargando…") }
-  // Qué capa base está activa (oscura por defecto; OSM si falló).
-  var baseName by remember { mutableStateOf("oscura") }
+  // Qué capa base está activa (OpenTopoMap por defecto; Voyager u OSM si falló).
+  var baseName by remember { mutableStateOf("OpenTopoMap") }
   // Leaflet local (assets): se lee una sola vez; si fallara, la página
   // no tendría L y la verificación de 8 s caería al esquema.
   val context = LocalContext.current
@@ -123,17 +135,15 @@ fun WebMap(
       }
     }.toString()
   }
-  val html = remember(zonesJson, limit, leafletJs, leafletCss) {
-    buildWebMapHtml(zonesJson, lat, lon, dir, gust, limit, leafletCss, leafletJs)
+  val html = remember(zonesJson, lat, lon, leafletJs, leafletCss) {
+    buildWebMapHtml(zonesJson, lat, lon, leafletCss, leafletJs)
   }
 
   if (webFailed) {
     fallback()
-    Spacer(Modifier.height(4.dp))
-    Text(mapStatus, style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
     return
   }
-  Box(Modifier.fillMaxWidth().height(300.dp)) {
+  Box(modifier) {
     AndroidView(
       factory = { ctx ->
         WebView(ctx).apply {
@@ -141,17 +151,16 @@ fun WebMap(
           settings.domStorageEnabled = true
           settings.allowFileAccess = true
           settings.allowUniversalAccessFromFileURLs = true
-          addJavascriptInterface(ZoneBridge(onZone, { mapStatus = "Mapa: error de la página → esquema"; webFailed = true }) { name -> baseName = name }, "Android")
+          addJavascriptInterface(ZoneBridge(onZone, { onStatus("Mapa: error de la página → esquema"); webFailed = true }) { name -> baseName = name; onStatus("Mapa: base cambiada a $name (respaldo automático)") }, "Android")
           webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
               pageLoaded = true
-              mapStatus = "Mapa: página cargada, comprobando…"
-              view.evaluateJavascript("updateWind($dir, $gust)", null)
+              onStatus("Mapa: página cargada, comprobando…")
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
               if (request.isForMainFrame) {
-                mapStatus = "Mapa: error al cargar la página → esquema"
+                onStatus("Mapa: error al cargar la página → esquema")
                 webFailed = true
               }
             }
@@ -159,7 +168,7 @@ fun WebMap(
             // Si el proceso del WebView muere, no se cierra la app: se
             // muestra el esquema y listo.
             override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-              mapStatus = "Mapa: el visor falló → esquema"
+              onStatus("Mapa: el visor falló → esquema")
               webFailed = true
               return true
             }
@@ -184,7 +193,7 @@ fun WebMap(
           Handler(Looper.getMainLooper()).postDelayed({
             if (!webFailed) {
               if (contentHeight == 0) {
-                mapStatus = "Mapa: la página no se dibujó (alto 0) → esquema"
+                onStatus("Mapa: la página no se dibujó (alto 0) → esquema")
                 webFailed = true
               } else {
                 try {
@@ -193,11 +202,11 @@ fun WebMap(
                     val hasL = parts.getOrNull(0) == "true"
                     val ready = parts.getOrNull(1) == "true"
                     val h = parts.getOrNull(2)?.toIntOrNull() ?: -1
-                    mapStatus = "Mapa: Leaflet " + if (hasL) "✓" else "✗" + " · listo " + if (ready) "✓" else "✗" + " · alto " + h + " px · base " + baseName
+                    onStatus("Mapa: Leaflet " + if (hasL) "✓" else "✗" + " · listo " + if (ready) "✓" else "✗" + " · alto " + h + " px · base " + baseName)
                     if (!hasL || !ready || h <= 50) webFailed = true
                   }
                 } catch (_: Exception) {
-                  mapStatus = "Mapa: no se pudo comprobar → esquema"
+                  onStatus("Mapa: no se pudo comprobar → esquema")
                   webFailed = true
                 }
               }
@@ -206,30 +215,37 @@ fun WebMap(
           webView = this
         }
       },
-      modifier = Modifier.fillMaxWidth().height(300.dp)
+      modifier = Modifier.fillMaxSize()
     )
     if (!pageLoaded) {
-      Box(Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
+      Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Cargando mapa…", color = Geo.Muted)
       }
     }
-  }
-  Spacer(Modifier.height(4.dp))
-  Text(mapStatus, style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
-  LaunchedEffect(pageLoaded, dir, gust) {
-    if (pageLoaded) webView?.evaluateJavascript("updateWind($dir, $gust)", null)
-  }
-  LaunchedEffect(pageLoaded, playing) {
-    if (pageLoaded) webView?.evaluateJavascript("setPaused(${!playing})", null)
-  }
-  LaunchedEffect(pageLoaded, intensity) {
-    if (pageLoaded) webView?.evaluateJavascript("setIntensity($intensity)", null)
   }
   LaunchedEffect(pageLoaded, selectedZone) {
     if (pageLoaded) {
       val arg = if (selectedZone == null) "null" else "'$selectedZone'"
       webView?.evaluateJavascript("selectZone($arg)", null)
     }
+  }
+  // La malla de viento llega por Kotlin cuando la consulta termina
+  // (después de que la página ya cargó): se empuja con setGrid y el JS
+  // dibuja las barbas para la hora actual. Cambiar de hora solo llama
+  // a setBarbHour, sin volver a pedir la malla.
+  LaunchedEffect(pageLoaded, gridJson) {
+    if (pageLoaded && gridJson != null) {
+      webView?.evaluateJavascript("setGrid($gridJson)", null)
+    }
+  }
+  LaunchedEffect(pageLoaded, barbHour) {
+    if (pageLoaded) webView?.evaluateJavascript("setBarbHour($barbHour)", null)
+  }
+  LaunchedEffect(pageLoaded, barbsVisible) {
+    if (pageLoaded) webView?.evaluateJavascript("setBarbsVisible($barbsVisible)", null)
+  }
+  LaunchedEffect(pageLoaded, lat, lon) {
+    if (pageLoaded) webView?.evaluateJavascript("setCenter($lat, $lon)", null)
   }
   // Capas (v1.3.0): las rutas de los frames son /v2/radar/<hex>, sin
   // comillas ni caracteres raros, así que el JSON se puede interpolar
@@ -246,95 +262,106 @@ fun WebMap(
   LaunchedEffect(pageLoaded, radarPlaying) {
     if (pageLoaded) webView?.evaluateJavascript("setRadarPlaying($radarPlaying)", null)
   }
-  LaunchedEffect(pageLoaded, arrowsVisible) {
-    if (pageLoaded) webView?.evaluateJavascript("setArrowsVisible($arrowsVisible)", null)
-  }
 }
 
-// HTML del mapa: Leaflet + base oscura CartoDB (respaldo OSM), 5 zonas
-// numeradas (tocar una avisa a la app), flechas que se mueven con el
-// viento y capa de radar RainViewer animada. Sin template literals de JS
-// (${...}) para no chocar con las plantillas de Kotlin.
-private fun buildWebMapHtml(zonesJson: String, lat: Double, lon: Double, dir: Double, gust: Double, limit: Double, leafletCss: String, leafletJs: String): String {
+// HTML del mapa: Leaflet + base clara OpenTopoMap (respaldo CartoDB
+// Voyager y luego OSM), 5 zonas numeradas (tocar una avisa a la app),
+// barbas de viento reales de la malla de Open-Meteo y capa de radar
+// RainViewer animada. Sin template literals de JS (${...}) para no
+// chocar con las plantillas de Kotlin.
+private fun buildWebMapHtml(zonesJson: String, lat: Double, lon: Double, leafletCss: String, leafletJs: String): String {
   val raw = """
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <style>__LEAFLET_CSS__</style>
-<style>html,body{margin:0;height:100%;background:#0A1622}#map{height:100%;width:100%;background:#0A1622}.znum{background:#0A2E4D;color:#fff;border:2px solid #fff;border-radius:50%;width:26px;height:26px;line-height:22px;text-align:center;font-weight:bold;font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.4)}.znum.sel{background:#B3261E}.zlab{background:rgba(10,22,34,.92);color:#F2F6F9;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:bold;white-space:nowrap}.arr{font-size:22px;line-height:1;text-shadow:0 0 3px #0A1622,0 0 3px #0A1622}</style>
+<style>html,body{margin:0;height:100%;background:#E9E7DE}#map{height:100%;width:100%;background:#E9E7DE}.znum{background:#0A2E4D;color:#fff;border:2px solid #fff;border-radius:50%;width:24px;height:24px;line-height:20px;text-align:center;font-weight:bold;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.35)}.znum.sel{background:#B3261E}.zlab{background:rgba(255,255,255,.93);color:#0A2E4D;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:bold;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)}.cdot{width:14px;height:14px;border-radius:50%;background:#2BB3A3;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}</style>
 <script>__LEAFLET_JS__</script>
 </head><body><div id="map"></div>
 <script>
 var ZONES = __ZONES__;
-var DIR = __DIR__; var GUST = __GUST__; var LIMIT = __LIMIT__;
-var paused = false; var intensity = 1; var arrowsVisible = true;
-var map = null; var zoneMarkers = {}; var arrows = [];
-var baseLayer = null; var osmLayer = null; var baseErrors = 0; var baseIsOsm = false;
+var GRID = null; var barbHour = -1; var barbsVisible = true;
+var map = null; var zoneMarkers = {}; var centerMarker = null; var barbLayer = null;
+var baseLayers = []; var baseIdx = 0; var baseErrors = 0;
 var radarPaths = []; var radarLayer = null; var radarIdx = 0; var radarTimer = null; var radarVisible = false; var radarPlaying = false;
-function flowColor(g){ return g < LIMIT*0.75 ? '#4CAF7D' : (g < LIMIT ? '#E0A800' : '#E5484D'); }
 function initMap(){
   if(typeof L === 'undefined' || map !== null) return;
   map = L.map('map', {zoomControl:false}).setView([__LAT__, __LON__], 12);
-  baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {maxZoom:19, attribution:'© OpenStreetMap © CARTO', subdomains:'abcd'});
-  osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'});
-  baseLayer.on('tileerror', function(){
-    if(baseIsOsm) return;
-    baseErrors++;
-    if(baseErrors >= 4){
-      baseIsOsm = true;
-      map.removeLayer(baseLayer); osmLayer.addTo(map);
-      if(window.Android) Android.onBaseLayer('OSM');
-    }
+  var topo = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {maxZoom:17, attribution:'&copy; OpenStreetMap contributors, SRTM | style: &copy; OpenTopoMap (CC-BY-SA)'});
+  var voyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors &copy; CARTO'});
+  var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'});
+  baseLayers = [{l:topo, n:'OpenTopoMap'}, {l:voyager, n:'Voyager'}, {l:osm, n:'OSM'}];
+  [topo, voyager, osm].forEach(function(layer){
+    layer.on('tileerror', function(){
+      if(baseIdx >= 2) return;
+      baseErrors++;
+      if(baseErrors >= 4){
+        map.removeLayer(layer);
+        baseIdx++; baseErrors = 0;
+        baseLayers[baseIdx].l.addTo(map);
+        if(window.Android) Android.onBaseLayer(baseLayers[baseIdx].n);
+      }
+    });
   });
-  baseLayer.addTo(map);
+  topo.addTo(map);
+  centerMarker = L.marker([__LAT__, __LON__], {icon: L.divIcon({className:'', html:'<div class="cdot"></div>', iconSize:[14,14], iconAnchor:[7,7]}), interactive:false}).addTo(map);
   ZONES.forEach(function(z){
-    var m = L.marker([z.lat, z.lon], {icon: L.divIcon({className:'', html:'<div class="znum" id="zn-'+z.n+'">'+z.n+'</div>', iconSize:[26,26], iconAnchor:[13,13]})}).addTo(map);
-    m.bindTooltip(z.name, {permanent:true, direction:'top', offset:[0,-14], className:'zlab'});
+    var m = L.marker([z.lat, z.lon], {icon: L.divIcon({className:'', html:'<div class="znum" id="zn-'+z.n+'">'+z.n+'</div>', iconSize:[24,24], iconAnchor:[12,12]})}).addTo(map);
+    m.bindTooltip(z.name, {permanent:true, direction:'top', offset:[0,-13], className:'zlab'});
     m.on('click', function(){ if(window.Android) Android.onZoneSelected(z.name); selectZone(z.name); });
     zoneMarkers[z.name] = m;
   });
-  makeArrows();
-  requestAnimationFrame(tick);
+  barbLayer = L.layerGroup().addTo(map);
+  renderBarbs();
   window.__mapReady = true;
 }
-function makeArrows(){
-  var i, lat, lon;
-  for(i=0;i<14;i++){
-    lat = 16.62 + Math.random()*0.22; lon = -93.28 + Math.random()*0.34;
-    var m = L.marker([lat,lon], {icon: L.divIcon({className:'', html:'<div class="arr">➤</div>', iconSize:[22,22], iconAnchor:[11,11]}), interactive:false}).addTo(map);
-    arrows.push({m:m, lat:lat, lon:lon});
+function barbTicks(speed){
+  if(speed < 2) return [];
+  if(speed < 5) return ['s'];
+  if(speed < 8) return ['l'];
+  if(speed < 12) return ['l','s'];
+  if(speed < 17) return ['l','l'];
+  return ['l','l','s'];
+}
+function barbSvg(dir, speed){
+  var ticks = barbTicks(speed);
+  var inner = '';
+  if(ticks.length === 0){
+    inner = '<circle cx="14" cy="14" r="3" fill="#1E6FB8"/>';
+  } else {
+    inner = '<line x1="14" y1="26" x2="14" y2="4" stroke="#1E6FB8" stroke-width="2"/>';
+    for(var i=0;i<ticks.length;i++){
+      var y = 6 + i*4;
+      var len = ticks[i] === 'l' ? 9 : 5;
+      inner += '<line x1="14" y1="' + y + '" x2="' + (14+len) + '" y2="' + (y + len*0.55).toFixed(1) + '" stroke="#1E6FB8" stroke-width="2"/>';
+    }
   }
-  paintArrows();
+  return '<svg width="28" height="28" viewBox="0 0 28 28"><g transform="rotate(' + dir + ' 14 14)">' + inner + '</g></svg>';
 }
-function paintArrows(){
+function renderBarbs(){
+  if(map === null || barbLayer === null) return;
+  barbLayer.clearLayers();
+  if(!barbsVisible || GRID === null || barbHour < 0) return;
+  for(var i=0;i<GRID.points.length;i++){
+    var p = GRID.points[i];
+    if(barbHour >= p.dir.length || barbHour >= p.speed.length) continue;
+    var d = p.dir[barbHour]; var s = p.speed[barbHour];
+    if(d === null || d === undefined || s === null || s === undefined) continue;
+    var m = L.marker([p.lat, p.lon], {icon: L.divIcon({className:'', html: barbSvg(d, s), iconSize:[28,28], iconAnchor:[14,14]}), interactive:false});
+    barbLayer.addLayer(m);
+  }
+}
+function setGrid(g){ GRID = g; renderBarbs(); }
+function setBarbHour(i){ barbHour = i; renderBarbs(); }
+function setBarbsVisible(b){ barbsVisible = b; renderBarbs(); }
+function setCenter(la, lo){
   if(map === null) return;
-  var c = flowColor(GUST);
-  arrows.forEach(function(a){
-    var el = a.m.getElement(); if(!el) return;
-    var d = el.querySelector('.arr'); if(!d) return;
-    d.style.display = arrowsVisible ? '' : 'none';
-    d.style.color = c;
-    d.style.transform = 'rotate(' + (DIR - 90) + 'deg)';
-    d.style.opacity = (0.35 + 0.65*intensity).toFixed(2);
-    d.style.fontSize = (16 + 10*intensity) + 'px';
-  });
-}
-var last = 0;
-function tick(ts){
-  requestAnimationFrame(tick);
-  if(map === null || paused || !arrowsVisible) return;
-  if(!last) last = ts; var dt = Math.min(50, ts-last); last = ts;
-  var toRad = DIR*Math.PI/180;
-  var step = dt*0.00002*(0.5 + GUST/10);
-  arrows.forEach(function(a){
-    a.lat += Math.cos(toRad)*step; a.lon += Math.sin(toRad)*step/Math.cos(16.75*Math.PI/180);
-    if(a.lat<16.60||a.lat>16.86||a.lon<-93.30||a.lon>-93.04){ a.lat=16.62+Math.random()*0.22; a.lon=-93.28+Math.random()*0.34; }
-    a.m.setLatLng([a.lat, a.lon]);
-  });
+  map.setView([la, lo], map.getZoom());
+  if(centerMarker !== null) centerMarker.setLatLng([la, lo]);
 }
 function radarUrl(i){ return 'https://tilecache.rainviewer.com' + radarPaths[i] + '/256/{z}/{x}/{y}/2/1_1.png'; }
 function ensureRadarLayer(){
   if(map === null || radarPaths.length === 0) return;
   if(radarLayer !== null){ radarLayer.setUrl(radarUrl(radarIdx)); return; }
-  radarLayer = L.tileLayer(radarUrl(radarIdx), {opacity:0.6, zIndex:5, attribution:'© RainViewer'}).addTo(map);
+  radarLayer = L.tileLayer(radarUrl(radarIdx), {opacity:0.6, zIndex:5, attribution:'&copy; RainViewer'}).addTo(map);
 }
 function startRadarTimer(){
   stopRadarTimer();
@@ -359,10 +386,6 @@ function setRadarPlaying(b){
   radarPlaying = b;
   if(b && radarVisible && radarPaths.length > 0) startRadarTimer(); else stopRadarTimer();
 }
-function setArrowsVisible(b){ arrowsVisible = b; paintArrows(); }
-function updateWind(d, g){ DIR=d; GUST=g; paintArrows(); }
-function setPaused(b){ paused=b; }
-function setIntensity(x){ intensity=x; paintArrows(); }
 function selectZone(name){
   Object.keys(zoneMarkers).forEach(function(k){
     var el = zoneMarkers[k].getElement(); if(!el) return;
@@ -381,7 +404,4 @@ window.addEventListener('load', function(){
     .replace("__LEAFLET_JS__", leafletJs)
     .replace("__LAT__", lat.toString())
     .replace("__LON__", lon.toString())
-    .replace("__DIR__", dir.toString())
-    .replace("__GUST__", gust.toString())
-    .replace("__LIMIT__", limit.toString())
 }

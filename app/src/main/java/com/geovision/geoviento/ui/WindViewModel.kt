@@ -45,6 +45,26 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
   // la pestaña Mapa y nunca bloquean nada. Lista vacía = sin radar.
   val radarFrames = MutableStateFlow<List<String>>(emptyList())
 
+  // Malla de viento modelado (v1.4.0): se pide UNA vez por lugar al
+  // abrir la pestaña Mapa y se reutiliza para todas las horas (cambiar
+  // de hora solo re-indexa, no vuelve a pedir). null = aún no llega;
+  // failed = la consulta falló y las barbas quedan escondidas.
+  val windGrid = MutableStateFlow<WindGrid?>(null)
+  val windGridFailed = MutableStateFlow(false)
+  private var gridKey: String? = null
+
+  fun refreshWindGrid(lat: Double, lon: Double) {
+    val key = "%.2f,%.2f".format(lat, lon)
+    if (key == gridKey) return
+    gridKey = key
+    windGrid.value = null
+    windGridFailed.value = false
+    viewModelScope.launch(handler) {
+      val g = withContext(Dispatchers.IO) { repo.fetchWindGrid(lat, lon) }
+      if (g != null) windGrid.value = g else windGridFailed.value = true
+    }
+  }
+
   fun refreshRadar() {
     viewModelScope.launch {
       val frames = withContext(Dispatchers.IO) { repo.fetchRadarFrames() }

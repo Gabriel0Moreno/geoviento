@@ -21,6 +21,18 @@ interface OpenMeteoApi {
     @Query("wind_speed_unit") unit: String = "ms", @Query("forecast_days") days: Int = 3,
     @Query("timezone") tz: String = "America/Mexico_City"
   ): OmResponse
+
+  // Malla de viento (v1.4.0): UNA consulta con latitudes y longitudes
+  // separadas por comas; Open-Meteo devuelve un arreglo JSON con una
+  // respuesta por punto, en el mismo orden (verificado 2026-11-26).
+  // Solo las variables de viento a 10 m, para que la respuesta sea ligera.
+  @GET("v1/forecast")
+  suspend fun forecastGrid(
+    @Query("latitude") lats: String, @Query("longitude") lons: String,
+    @Query("hourly") hourly: String = "wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+    @Query("wind_speed_unit") unit: String = "ms", @Query("forecast_days") days: Int = 3,
+    @Query("timezone") tz: String = "America/Mexico_City"
+  ): List<OmResponse>
 }
 
 // Archivo histórico ERA5 (días pasados): solo variables válidas a 10 m.
