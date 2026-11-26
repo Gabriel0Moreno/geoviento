@@ -158,13 +158,23 @@ fun MapTab(
       lat, lon, selectedZone,
       onZone = { selectedZone = it },
       fallback = {
-        CurrentsMap(
-          hourPoint?.dir10 ?: n.dir10, hourPoint?.gust10 ?: n.gust10,
-          true, 1f, selectedZone,
-          onZoneSelected = { selectedZone = it },
-          modifier = Modifier.fillMaxSize(),
-          limit = limit
-        )
+        // El esquema de respaldo es SOLO de Tuxtla (zonas y Cañón
+        // dibujados a mano). Fuera de Tuxtla no tiene sentido: mejor un
+        // aviso neutro que zonas de otro estado (bug visto en Cd.
+        // Victoria, 2026-11-26).
+        if (isTuxtla) {
+          CurrentsMap(
+            hourPoint?.dir10 ?: n.dir10, hourPoint?.gust10 ?: n.gust10,
+            true, 1f, selectedZone,
+            onZoneSelected = { selectedZone = it },
+            modifier = Modifier.fillMaxSize(),
+            limit = limit
+          )
+        } else {
+          Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Mapa no disponible sin conexión", color = Geo.Muted)
+          }
+        }
       },
       radarFrames = radarFrames,
       radarVisible = radarOn,
@@ -172,6 +182,7 @@ fun MapTab(
       barbsVisible = barbsOn,
       barbHour = barbHour,
       gridJson = gridJson,
+      showZones = isTuxtla,
       modifier = Modifier.fillMaxSize(),
       onStatus = { mapStatus = it }
     )

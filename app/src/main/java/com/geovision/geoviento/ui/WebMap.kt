@@ -75,7 +75,8 @@ import org.json.JSONObject
 class ZoneBridge(
   private val onZone: (String) -> Unit,
   private val onError: () -> Unit,
-  private val onBase: (String) -> Unit = {}
+  private val onBase: (String) -> Unit = {},
+  private val onJsError: (String) -> Unit = {}
 ) {
   private val main = Handler(Looper.getMainLooper())
 
@@ -95,6 +96,14 @@ class ZoneBridge(
   fun onBaseLayer(name: String) {
     main.post { onBase(name) }
   }
+
+  // Un error de JavaScript dentro de la página (por ejemplo, algo que
+  // tumbó initMap y dejó __mapReady en falso): se reporta en la línea
+  // de diagnóstico para saber exactamente qué falló en el teléfono.
+  @JavascriptInterface
+  fun onJsError(msg: String) {
+    main.post { onJsError(msg) }
+  }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -108,6 +117,7 @@ fun WebMap(
   barbsVisible: Boolean = true,
   barbHour: Int = -1,
   gridJson: String? = null,
+  showZones: Boolean = true,
   modifier: Modifier = Modifier,
   onStatus: (String) -> Unit = {}
 ) {
@@ -121,8 +131,12 @@ fun WebMap(
   val context = LocalContext.current
   val leafletJs = remember { try { context.assets.open("leaflet.js").bufferedReader().readText() } catch (_: Exception) { "" } }
   val leafletCss = remember { try { context.assets.open("leaflet.css").bufferedReader().readText() } catch (_: Exception) { "" } }
-  val zonesJson = remember {
-    JSONArray().apply {
+  // Zonas de Tuxtla: solo se dibujan cuando el lugar es Tuxtla
+  // (showZones). Fuera de Tuxtla la lista va vacía: el mapa no debe
+  // mostrar el Cañón ni Centro en otro estado (bug visto en Cd.
+  // Victoria, 2026-11-26).
+  val zonesJson = remember(showZones) {
+    if (!showZones) "[]" else JSONArray().apply {
       ZONES.forEachIndexed { i, z ->
         put(JSONObject().apply {
           put("n", i + 1)
@@ -151,7 +165,12 @@ fun WebMap(
           settings.domStorageEnabled = true
           settings.allowFileAccess = true
           settings.allowUniversalAccessFromFileURLs = true
-          addJavascriptInterface(ZoneBridge(onZone, { onStatus("Mapa: error de la página → esquema"); webFailed = true }) { name -> baseName = name; onStatus("Mapa: base cambiada a $name (respaldo automático)") }, "Android")
+          addJavascriptInterface(ZoneBridge(
+            onZone = onZone,
+            onError = { onStatus("Mapa: error de la página → esquema"); webFailed = true },
+            onBase = { name -> baseName = name; onStatus("Mapa: base cambiada a $name (respaldo automático)") },
+            onJsError = { msg -> onStatus("Mapa: error JS: $msg") }
+          ), "Android")
           webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
               pageLoaded = true
@@ -202,7 +221,13 @@ fun WebMap(
                     val hasL = parts.getOrNull(0) == "true"
                     val ready = parts.getOrNull(1) == "true"
                     val h = parts.getOrNull(2)?.toIntOrNull() ?: -1
-                    onStatus("Mapa: Leaflet " + if (hasL) "✓" else "✗" + " · listo " + if (ready) "✓" else "✗" + " · alto " + h + " px · base " + baseName)
+                    // OJO: el texto se arma con paréntesis. Antes, sin
+                    // ellos, el if/else se tragaba el resto del mensaje y
+                    // la línea solo decía "Mapa: Leaflet ✓" aunque el
+                    // mapa no estuviera listo o midiera 0 px (así se
+                    // escondió el fallo del 26 nov).
+                    val statusText = "Mapa: Leaflet " + (if (hasL) "✓" else "✗") + " · listo " + (if (ready) "✓" else "✗") + " · alto " + h + " px · base " + baseName
+                    onStatus(statusText)
                     if (!hasL || !ready || h <= 50) webFailed = true
                   }
                 } catch (_: Exception) {
@@ -282,6 +307,10 @@ var GRID = null; var barbHour = -1; var barbsVisible = true;
 var map = null; var zoneMarkers = {}; var centerMarker = null; var barbLayer = null;
 var baseLayers = []; var baseIdx = 0; var baseErrors = 0;
 var radarPaths = []; var radarLayer = null; var radarIdx = 0; var radarTimer = null; var radarVisible = false; var radarPlaying = false;
+// Cualquier error de JS en la página se reporta a la app para que la
+// línea de diagnóstico diga exactamente qué falló (antes el fallo era
+// invisible: la línea solo decía "Leaflet ✓").
+window.onerror = function(m, s, l){ if(window.Android) Android.onJsError(m + ' @' + l); };
 function initMap(){
   if(typeof L === 'undefined' || map !== null) return;
   map = L.map('map', {zoomControl:false}).setView([__LAT__, __LON__], 12);
@@ -312,6 +341,9 @@ function initMap(){
   barbLayer = L.layerGroup().addTo(map);
   renderBarbs();
   window.__mapReady = true;
+  // Si el contenedor aún no tenía tamaño al crear el mapa, Leaflet se
+  // queda en 0 px: se le pide recalcular medio segundo después.
+  setTimeout(function(){ if(map !== null) map.invalidateSize(); }, 500);
 }
 function barbTicks(speed){
   if(speed < 2) return [];

@@ -1,5 +1,10 @@
 # Changelog — GeoViento
 
+## [1.4.1] - 2026-11-26
+- MAPA FUERA DE TUXTLA (reporte de Gabo, Cd. Victoria): al cambiar de lugar, el mapa seguía mostrando las zonas de Tuxtla (Cañón del Sumidero, Centro, etc.) porque lo que se veía era el esquema de respaldo, dibujado a mano solo para Tuxtla. Ahora las zonas del mapa y el esquema de respaldo solo aparecen en Tuxtla; fuera de Tuxtla el respaldo es un aviso neutro ("Mapa no disponible sin conexión") y el mapa web no dibuja zonas.
+- DIAGNÓSTICO DEL MAPA: la línea bajo el mapa mentía — por un if/else sin paréntesis solo decía "Mapa: Leaflet ✓" aunque el mapa no estuviera listo o midiera 0 px, y así se escondió el fallo. Ahora muestra Leaflet/listo/alto/base por separado, y cualquier error de JavaScript dentro de la página se reporta en esa misma línea (puente `onJsError`). Además el mapa recalcula su tamaño medio segundo después de crearse (`invalidateSize`), por si el contenedor aún no tenía tamaño al inicio.
+- Sin más cambios: todo lo demás (Inicio, Pronóstico, Más, semáforo, radar, barbas, PDF) sigue igual.
+
 ## [1.4.0] - 2026-11-26
 - CORRECCIÓN BUILD (2026-11-26): el primer build de Actions falló con 4 errores `Unresolved reference 'BoxScope'` en MapTab.kt — faltaba el import `androidx.compose.foundation.layout.BoxScope` (lo usa `PillButton` como receptor de su contenido). Agregado el import; nada más cambió.
 - MAPA NUEVO (Gabo: "se ve horrible el mapa"): la pestaña Mapa se reconstruyó como la pantalla de mapa que pidió (DroneCheck): el mapa a pantalla casi completa (alto ~pantalla menos 240 dp), controles flotantes sobre él, base clara con relieve real (OpenTopoMap, cadena de respaldo OpenTopoMap → CartoDB Voyager → OSM por conteo de errores de tesela, con su atribución correcta) y hoja inferior oscura con los 9 datos en 3 columnas. La v1.3.0 apilaba chips sobre un mapa oscuro de 300 dp que se veía como un vacío negro con 3 flechas amarillas sueltas y una banda diagonal rara; todo eso se fue. Sin Mapbox, sin token, sin código de DroneCheck: código propio + baldosas y datos públicos gratuitos. El mapa sigue siendo WebView/Leaflet, nada de código nativo.
