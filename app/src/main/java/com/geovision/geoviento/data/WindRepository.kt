@@ -4,8 +4,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.net.HttpURLConnection
@@ -41,6 +39,7 @@ class WindRepository {
   private val elevApi = retrofit("https://api.open-meteo.com/").create(ElevationApi::class.java)
   private val metNo = retrofit("https://api.met.no/").create(MetNoApi::class.java)
   private val kpApi = retrofit("https://services.swpc.noaa.gov/").create(KpApi::class.java)
+  private val rainApi = retrofit("https://api.rainviewer.com/").create(RainViewerApi::class.java)
 
   // Índice Kp (NOAA SWPC): nunca bloquea la carga del viento. Si falla,
   // devuelve null y la app muestra "No disponible" en la tarjeta de Kp y
@@ -63,19 +62,14 @@ class WindRepository {
   // radar simplemente no se muestra y la app sigue normal, sin errores.
   // El satélite infrarrojo de la misma API venía vacío en la respuesta
   // del 2026-11-26, así que la capa "Clima" no depende de él.
+  // Se pide con Retrofit como el resto del repositorio: el acceso
+  // directo a Response.body de OkHttp crudo no compila (ese campo es
+  // package-private en okhttp3.Response; falló el build de Actions
+  // 2026-11-26 en esta función).
   suspend fun fetchRadarFrames(): List<String> = withContext(Dispatchers.IO) {
     try {
-      val req = Request.Builder()
-        .url("https://api.rainviewer.com/public/weather-maps.json")
-        .header("User-Agent", "GeovientoMx/1.3.0 (github.com/Gabriel0Moreno/geoviento)")
-        .build()
-      val body = http.newCall(req).execute().use { it.body?.string() } ?: return@withContext emptyList()
-      val past = JSONObject(body).optJSONObject("radar")?.optJSONArray("past") ?: return@withContext emptyList()
-      val out = mutableListOf<String>()
-      for (i in 0 until past.length()) {
-        past.optJSONObject(i)?.optString("path")?.takeIf { it.isNotBlank() }?.let { out.add(it) }
-      }
-      out
+      rainApi.weatherMaps().radar?.past.orEmpty()
+        .mapNotNull { it.path?.takeIf { p -> p.isNotBlank() } }
     } catch (_: Exception) {
       emptyList()
     }

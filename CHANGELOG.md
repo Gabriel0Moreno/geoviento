@@ -1,6 +1,7 @@
 # Changelog — GeoViento
 
 ## [1.3.0] - 2026-11-26
+- CORRECCIÓN BUILD (2026-11-26): el build de GitHub Actions fallaba con un solo error en WindRepository.kt:72 — el acceso directo `it.body` de OkHttp crudo no compila (ese campo es package-private en okhttp3.Response). `fetchRadarFrames()` (radar RainViewer) ahora usa Retrofit como el resto del repositorio (nueva interfaz `RainViewerApi`); mismo comportamiento, mismos datos.
 - REDISEÑO (inspirado en la estructura de DroneCheck, con identidad
   propia de GeoViento, sin copiar su código): tema oscuro azul marino,
   navegación inferior con 4 pestañas (Inicio, Mapa, Pronóstico, Más) y
