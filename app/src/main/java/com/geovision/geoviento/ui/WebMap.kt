@@ -298,7 +298,7 @@ private fun buildWebMapHtml(zonesJson: String, lat: Double, lon: Double, leaflet
   val raw = """
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <style>__LEAFLET_CSS__</style>
-<style>html,body{margin:0;height:100%;background:#E9E7DE}#map{height:100%;width:100%;background:#E9E7DE}.znum{background:#0A2E4D;color:#fff;border:2px solid #fff;border-radius:50%;width:24px;height:24px;line-height:20px;text-align:center;font-weight:bold;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.35)}.znum.sel{background:#B3261E}.zlab{background:rgba(255,255,255,.93);color:#0A2E4D;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:bold;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)}.cdot{width:14px;height:14px;border-radius:50%;background:#2BB3A3;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}</style>
+<style>html,body{margin:0;height:100%;background:#E9E7DE}#map{height:100vh;width:100%;background:#E9E7DE}.znum{background:#0A2E4D;color:#fff;border:2px solid #fff;border-radius:50%;width:24px;height:24px;line-height:20px;text-align:center;font-weight:bold;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.35)}.znum.sel{background:#B3261E}.zlab{background:rgba(255,255,255,.93);color:#0A2E4D;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:bold;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25)}.cdot{width:14px;height:14px;border-radius:50%;background:#2BB3A3;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}</style>
 <script>__LEAFLET_JS__</script>
 </head><body><div id="map"></div>
 <script>
@@ -342,8 +342,15 @@ function initMap(){
   renderBarbs();
   window.__mapReady = true;
   // Si el contenedor aún no tenía tamaño al crear el mapa, Leaflet se
-  // queda en 0 px: se le pide recalcular medio segundo después.
-  setTimeout(function(){ if(map !== null) map.invalidateSize(); }, 500);
+  // queda en 0 px: medio segundo después se le pone al div la altura
+  // real del visor (window.innerHeight) y se le pide recalcular. Sin
+  // esto, en el teléfono el mapa medía "alto 0 px" y la comprobación de
+  // 8 s lo tumbaba al esquema (visto en Cd. de México, 2026-11-26).
+  setTimeout(function(){
+    var d = document.getElementById('map');
+    if(d) d.style.height = window.innerHeight + 'px';
+    if(map !== null) map.invalidateSize();
+  }, 500);
 }
 function barbTicks(speed){
   if(speed < 2) return [];

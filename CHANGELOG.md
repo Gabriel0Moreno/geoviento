@@ -1,5 +1,9 @@
 # Changelog — GeoViento
 
+## [1.4.2] - 2026-11-26
+- MAPA EN 0 PX (reporte de Gabo, Cd. de México, con la 1.4.1): la línea de diagnóstico ya decía la verdad — "Leaflet ✓ · listo ✓ · alto 0 px · base OpenTopoMap" — o sea, Leaflet cargaba bien pero el contenedor del mapa medía 0 px de alto y la comprobación lo tumbaba al esquema. Causa: `#map{height:100%}` no se resolvía en el WebView del teléfono. Ahora el div mide `100vh` y medio segundo después de crearse el mapa se le pone la altura real del visor (`window.innerHeight`) y se le pide recalcular (`invalidateSize`). Si la línea sigue diciendo "alto 0 px", el problema ya no es el CSS sino el tamaño del propio WebView.
+- Sin más cambios: todo lo demás sigue igual que en la 1.4.1.
+
 ## [1.4.1] - 2026-11-26
 - MAPA FUERA DE TUXTLA (reporte de Gabo, Cd. Victoria): al cambiar de lugar, el mapa seguía mostrando las zonas de Tuxtla (Cañón del Sumidero, Centro, etc.) porque lo que se veía era el esquema de respaldo, dibujado a mano solo para Tuxtla. Ahora las zonas del mapa y el esquema de respaldo solo aparecen en Tuxtla; fuera de Tuxtla el respaldo es un aviso neutro ("Mapa no disponible sin conexión") y el mapa web no dibuja zonas.
 - DIAGNÓSTICO DEL MAPA: la línea bajo el mapa mentía — por un if/else sin paréntesis solo decía "Mapa: Leaflet ✓" aunque el mapa no estuviera listo o midiera 0 px, y así se escondió el fallo. Ahora muestra Leaflet/listo/alto/base por separado, y cualquier error de JavaScript dentro de la página se reporta en esa misma línea (puente `onJsError`). Además el mapa recalcula su tamaño medio segundo después de crearse (`invalidateSize`), por si el contenedor aún no tenía tamaño al inicio.
