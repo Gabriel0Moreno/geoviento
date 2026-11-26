@@ -229,7 +229,7 @@ fun MapTab(
   // Nota del cañón (solo cerca de Tuxtla).
   if (isTuxtla) {
     Text(
-      "En el Cañón del Sumidero la ráfaga local puede subir ~45% respecto a la ciudad: %.1f m/s.".format((hourPoint?.gust10 ?: n.gust10) * 1.45),
+      "En el Cañón del Sumidero la ráfaga local puede subir ~45%% respecto a la ciudad: %.1f m/s.".format((hourPoint?.gust10 ?: n.gust10) * 1.45),
       style = MaterialTheme.typography.bodySmall, color = Geo.Muted
     )
     Spacer(Modifier.height(12.dp))

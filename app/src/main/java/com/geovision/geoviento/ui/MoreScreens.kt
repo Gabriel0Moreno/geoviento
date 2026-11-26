@@ -174,7 +174,7 @@ fun PrefsScreen(prefs: FlightPrefs, droneLimit: Double, onSave: (FlightPrefs) ->
   Spacer(Modifier.height(12.dp))
   SectionTitle("Margen de viento: ${draft.windMarginPct}%")
   Text(
-    "El margen reduce el límite efectivo del semáforo: con tu dron (${droneLimit} m/s) y ${draft.windMarginPct}%, el rojo empieza en %.1f m/s.".format(effLimit),
+    "El margen reduce el límite efectivo del semáforo: con tu dron (${droneLimit} m/s) y ${draft.windMarginPct}%%, el rojo empieza en %.1f m/s.".format(effLimit),
     style = MaterialTheme.typography.bodySmall, color = Geo.Muted
   )
   Slider(

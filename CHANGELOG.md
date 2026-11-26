@@ -2,6 +2,7 @@
 
 ## [1.3.0] - 2026-11-26
 - CORRECCIÓN BUILD (2026-11-26): el build de GitHub Actions fallaba con un solo error en WindRepository.kt:72 — el acceso directo `it.body` de OkHttp crudo no compila (ese campo es package-private en okhttp3.Response). `fetchRadarFrames()` (radar RainViewer) ahora usa Retrofit como el resto del repositorio (nueva interfaz `RainViewerApi`); mismo comportamiento, mismos datos.
+- CORRECCIÓN CRASH MAPA (2026-11-26): al tocar "Mapa" en Tuxtla la app se cerraba con `UnknownFormatConversionException: Conversion = 'r'` (MapTab.kt:232). La nota del Cañón del Sumidero decía `~45% respecto...` dentro de un `.format()`: el `%` suelto se interpretaba como inicio de conversión (`% r`). Corregido a `~45%%`. Auditoría de todos los `.format()` del proyecto: se encontró el mismo patrón latente en Preferencias de vuelo (MoreScreens.kt:177, `${draft.windMarginPct}%, el rojo...` — habría cerrado la pantalla al abrirla) y también se escapó a `%%`. Regla: un `%` literal dentro de un `.format()` siempre va como `%%`.
 - REDISEÑO (inspirado en la estructura de DroneCheck, con identidad
   propia de GeoViento, sin copiar su código): tema oscuro azul marino,
   navegación inferior con 4 pestañas (Inicio, Mapa, Pronóstico, Más) y
