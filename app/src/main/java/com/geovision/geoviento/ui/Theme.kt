@@ -11,7 +11,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -109,8 +111,9 @@ fun StatusChip(text: String, color: Color, modifier: Modifier = Modifier) {
 }
 
 // Glifos de la navegación inferior, dibujados con Canvas para no depender
-// de ningún paquete de iconos extra: casa, mapa con pin, gráfica y "más".
-enum class NavKind { HOME, MAP, CHART, MORE }
+// de ningún paquete de iconos extra: casa, mapa con pin, gráfica,
+// calendario (Agenda, v1.5.0) y "más".
+enum class NavKind { HOME, MAP, CHART, AGENDA, MORE }
 
 @Composable
 fun NavGlyph(kind: NavKind, selected: Boolean, modifier: Modifier = Modifier) {
@@ -146,6 +149,16 @@ fun NavGlyph(kind: NavKind, selected: Boolean, modifier: Modifier = Modifier) {
         drawPath(line, color, style = s)
         drawCircle(color, radius = 2.5f, center = Offset(w - 2f, h * 0.2f))
         drawLine(color, Offset(2f, h - 2f), Offset(w - 2f, h - 2f), strokeWidth = 2f)
+      }
+      NavKind.AGENDA -> {
+        // Calendario: rectángulo redondeado con dos pestañas arriba y
+        // dos renglones de texto.
+        drawRoundRect(color, Offset(3f, 5f), Size(w - 6f, h - 7f), CornerRadius(3f, 3f), style = s)
+        drawLine(color, Offset(3f, 9.5f), Offset(w - 3f, 9.5f), strokeWidth = 2.5f)
+        drawLine(color, Offset(w * 0.32f, 2f), Offset(w * 0.32f, 6f), strokeWidth = 2.5f)
+        drawLine(color, Offset(w * 0.68f, 2f), Offset(w * 0.68f, 6f), strokeWidth = 2.5f)
+        drawLine(color, Offset(7f, 14f), Offset(w - 7f, 14f), strokeWidth = 2f)
+        drawLine(color, Offset(7f, 18f), Offset(w - 7f, 18f), strokeWidth = 2f)
       }
       NavKind.MORE -> {
         for (i in 0..2) drawCircle(color, radius = 3f, center = Offset(w * (0.2f + 0.3f * i), h / 2f))

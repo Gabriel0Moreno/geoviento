@@ -1,5 +1,11 @@
 # Changelog — GeoViento
 
+## [1.5.0] - 2026-11-26
+- AGENDA (nueva 5ª pestaña, entre Pronóstico y Más, con icono de calendario dibujado como los demás): agendar fechas de vuelo con fecha, hora, lugar y nota opcional. Cada fecha próxima muestra el viento y las ráfagas esperados a esa hora con el color del semáforo, si cae dentro del pronóstico de 72 h que ya trae la app (más allá de 3 días dice que no hay pronóstico). Tocar una fecha abre el formulario prellenado para editarla; la ✕ la borra; las pasadas quedan abajo en gris, también borrables.
+- RECORDATORIO: notificación 1 hora antes de cada fecha (WorkManager, sin alarma exacta). El permiso de notificaciones (Android 13+) se pide solo al agendar la primera fecha; si se niega, la fecha se guarda igual y se avisa que el recordatorio no llegará. Al editar se reprograma y al borrar se cancela el aviso. LÍMITE: WorkManager no es exacto al minuto — con el teléfono en ahorro de batería el aviso puede llegar con unos minutos de retraso.
+- MAPA GENERAL DE LA AGENDA: mapa WebView/Leaflet (nada nativo) con base clara OpenTopoMap y la misma cadena de respaldo que el mapa principal, con un pin numerado por cada lugar agendado; al tocar un pin se ve su fecha, hora y lugar, con botones para editarlo. Lleva el arreglo de la 1.4.2 (div a 100vh + altura real del visor a los 500 ms + invalidateSize) y la misma verificación de 8 s con línea de diagnóstico propia ("Agenda: ...").
+- Las fechas se guardan en el teléfono (SharedPreferences con JSON, mismo patrón que Preferencias de vuelo). Sin más cambios: Inicio, Mapa, Pronóstico, Más, semáforo, radar, barbas, PDF y el handler de crash siguen igual.
+
 ## [1.4.2] - 2026-11-26
 - MAPA EN 0 PX (reporte de Gabo, Cd. de México, con la 1.4.1): la línea de diagnóstico ya decía la verdad — "Leaflet ✓ · listo ✓ · alto 0 px · base OpenTopoMap" — o sea, Leaflet cargaba bien pero el contenedor del mapa medía 0 px de alto y la comprobación lo tumbaba al esquema. Causa: `#map{height:100%}` no se resolvía en el WebView del teléfono. Ahora el div mide `100vh` y medio segundo después de crearse el mapa se le pone la altura real del visor (`window.innerHeight`) y se le pide recalcular (`invalidateSize`). Si la línea sigue diciendo "alto 0 px", el problema ya no es el CSS sino el tamaño del propio WebView.
 - Sin más cambios: todo lo demás sigue igual que en la 1.4.1.

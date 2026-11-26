@@ -83,6 +83,38 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
   // de la del informe PDF para no mezclar los resultados.
   val mainPlaces = MutableStateFlow<List<PlaceResult>>(emptyList())
 
+  // Agenda de vuelos (v1.5.0): fechas guardadas en el teléfono
+  // (AgendaStore) + búsqueda de lugar propia del formulario, aparte de
+  // la principal y de la del informe para no mezclar resultados.
+  val agendaItems = MutableStateFlow(AgendaStore.load(context))
+  val agendaPlaces = MutableStateFlow<List<PlaceResult>>(emptyList())
+
+  fun searchAgendaPlaces(query: String) {
+    viewModelScope.launch(handler) {
+      if (query.length < 3) { agendaPlaces.value = emptyList(); return@launch }
+      agendaPlaces.value = repo.searchPlace(query)
+    }
+  }
+
+  // Guardar (nueva o editada): se ordena por fecha+hora, se persiste y
+  // se programa su recordatorio (1 hora antes). Editar reprograma: el
+  // trabajo viejo se cancela dentro de schedule.
+  fun saveAgendaItem(item: AgendaItem) {
+    val list = (agendaItems.value.filter { it.id != item.id } + item)
+      .sortedBy { it.date + "T" + it.time }
+    agendaItems.value = list
+    AgendaStore.save(context, list)
+    AgendaReminder.schedule(context, item)
+  }
+
+  // Borrar: se persiste la lista sin esa fecha y se cancela su
+  // recordatorio por etiqueta, para que no suene un aviso huérfano.
+  fun deleteAgendaItem(id: String) {
+    agendaItems.value = agendaItems.value.filter { it.id != id }
+    AgendaStore.save(context, agendaItems.value)
+    AgendaReminder.cancel(context, id)
+  }
+
   // Perfil del relieve del lugar principal (v1.2.3): se carga con los
   // datos del viento y se vuelve a pedir si el lugar cambia o si el
   // viento gira más de 45° (el corte sigue el eje del viento).

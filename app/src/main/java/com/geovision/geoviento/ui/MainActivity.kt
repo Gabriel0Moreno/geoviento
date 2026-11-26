@@ -43,10 +43,12 @@ import java.util.Locale
 import kotlin.math.abs
 
 // Pestañas inferiores (v1.3.0): Inicio, Mapa, Pronóstico, Más.
+// v1.5.0: se agrega Agenda (fechas de vuelo con recordatorio).
 private enum class Tab(val label: String, val kind: NavKind) {
   HOME("Inicio", NavKind.HOME),
   MAP("Mapa", NavKind.MAP),
   FORECAST("Pronóstico", NavKind.CHART),
+  AGENDA("Agenda", NavKind.AGENDA),
   MORE("Más", NavKind.MORE)
 }
 
@@ -122,6 +124,12 @@ class MainActivity : ComponentActivity() {
     val perm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
       onPermission?.invoke(granted)
     }
+    // Permiso de notificaciones (Android 13+, v1.5.0): la Agenda lo pide
+    // solo al agendar la primera fecha. Mismo patrón que el de ubicación.
+    var onNotifPermission: ((Boolean) -> Unit)? = null
+    val notifPerm = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+      onNotifPermission?.invoke(granted)
+    }
     setContent {
       // Fábrica explícita: el ViewModel necesita la Application y la fábrica
       // por defecto no siempre lo crea bien; sin esto la app se cerraba
@@ -145,6 +153,8 @@ class MainActivity : ComponentActivity() {
       val radarFrames by vm.radarFrames.collectAsState()
       val windGrid by vm.windGrid.collectAsState()
       val gridFailed by vm.windGridFailed.collectAsState()
+      val agendaItems by vm.agendaItems.collectAsState()
+      val agendaPlaces by vm.agendaPlaces.collectAsState()
       val context = LocalContext.current
       val scope = rememberCoroutineScope()
       val focusManager = LocalFocusManager.current
@@ -156,6 +166,7 @@ class MainActivity : ComponentActivity() {
       val mainPlaces by vm.mainPlaces.collectAsState()
       var hasPermission by remember { mutableStateOf(false) }
       // Navegación (v1.3.0): 4 pestañas + subpantallas.
+      // v1.5.0: 5 pestañas (se agrega Agenda).
       var tab by remember { mutableStateOf(Tab.HOME) }
       var sub by remember { mutableStateOf<SubScreen?>(null) }
 
@@ -318,6 +329,25 @@ class MainActivity : ComponentActivity() {
                   placeName = placeName,
                   limit = limit,
                   prefs = prefs
+                )
+                Tab.AGENDA -> AgendaScreen(
+                  report = report,
+                  limit = limit,
+                  prefs = prefs,
+                  items = agendaItems,
+                  currentLat = lat,
+                  currentLon = lon,
+                  currentPlaceName = placeName,
+                  onUseGps = { useGps() },
+                  searchResults = agendaPlaces,
+                  onSearchPlaces = { vm.searchAgendaPlaces(it) },
+                  onClearSearch = { vm.agendaPlaces.value = emptyList() },
+                  onSave = { vm.saveAgendaItem(it) },
+                  onDelete = { vm.deleteAgendaItem(it) },
+                  requestNotifPermission = { cb ->
+                    onNotifPermission = cb
+                    notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
+                  }
                 )
                 Tab.MORE -> MoreScreen(onOpen = { dest -> sub = dest.toSubScreen() })
               }
