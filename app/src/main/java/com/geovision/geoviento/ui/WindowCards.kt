@@ -8,20 +8,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovision.geoviento.data.HourlyPoint
+import com.geovision.geoviento.data.SpeedUnit
 
 private data class Run(val start: Int, val end: Int, val level: FlightLevel)
 private data class WindowCard(val title: String, val chip: String, val color: Color, val text: String)
 
-private fun hourLabel(time: String): String {
-  val h = time.substringAfter("T").substringBefore(":")
-  return if (h.length == 2) "$h:00" else time
-}
-
-// Tarjetas de ventanas de la demo, calculadas con los datos en vivo:
+// Tarjetas de ventanas, calculadas con los datos en vivo:
 // ventana buena (racha verde más larga), transición (primer amarillo),
 // evita volar (racha con la ráfaga máxima) y se calma (verde después del pico).
+// v1.3.0: tema oscuro y unidad de velocidad según las Preferencias.
 @Composable
-fun WindowCards(hourly: List<HourlyPoint>, limit: Double) {
+fun WindowCards(hourly: List<HourlyPoint>, limit: Double, unit: SpeedUnit = SpeedUnit.MS) {
   val points = hourly.take(24)
   if (points.isEmpty()) return
   val runs = mutableListOf<Run>()
@@ -46,29 +43,29 @@ fun WindowCards(hourly: List<HourlyPoint>, limit: Double) {
     val minS = points.subList(r.start, r.end + 1).minOf { it.speed10 }
     val maxS = points.subList(r.start, r.end + 1).maxOf { it.speed10 }
     val label = if (r.end - r.start + 1 >= 24) "Todo el día" else "${hourLabel(points[r.start].time)}–${hourLabel(points[r.end].time)}"
-    cards.add(WindowCard("Ventana buena · $label", "VERDE", Color(0xFF1B7A3D), "Viento de %.1f a %.1f m/s, sin ráfagas reportadas y con luz creciente. Ideal para foto de terrenos y recorridos.".format(minS, maxS)))
+    cards.add(WindowCard("Ventana buena · $label", "VERDE", Geo.Green, "Viento de ${formatSpeed(minS, unit)} a ${formatSpeed(maxS, unit)}, sin ráfagas reportadas y con luz creciente. Ideal para foto de terrenos y recorridos."))
   }
   yellowRuns.firstOrNull()?.let { r ->
     val minG = points.subList(r.start, r.end + 1).minOf { it.gust10 }
     val maxG = points.subList(r.start, r.end + 1).maxOf { it.gust10 }
-    cards.add(WindowCard("Transición · ${hourLabel(points[r.start].time)}–${hourLabel(points[r.end].time)}", "AMARILLO", Color(0xFF8A6D00), "Ráfagas de %.1f a %.1f m/s del noroeste. Vuelos cortos, cerca y sin alejar el dron: regresa con batería de sobra.".format(minG, maxG)))
+    cards.add(WindowCard("Transición · ${hourLabel(points[r.start].time)}–${hourLabel(points[r.end].time)}", "AMARILLO", Geo.Amber, "Ráfagas de ${formatSpeed(minG, unit)} a ${formatSpeed(maxG, unit)} del noroeste. Vuelos cortos, cerca y sin alejar el dron: regresa con batería de sobra."))
   }
   maxRun?.let { r ->
     if (r.level != FlightLevel.GREEN) {
       val minG = points.subList(r.start, r.end + 1).minOf { it.gust10 }
       val maxG = points.subList(r.start, r.end + 1).maxOf { it.gust10 }
       val chip = if (r.level == FlightLevel.RED) "ROJO" else "AMARILLO ALTO"
-      val advice = if (r.level == FlightLevel.RED) "No despegar: la ráfaga supera el límite de tu dron. Espera a que baje." else "Ráfagas de %.1f a %.1f m/s: precaución, el dron ligero sufre y la toma 360° se mueve.".format(minG, maxG)
-      cards.add(WindowCard("Evita volar · ${hourLabel(points[r.start].time)}–${hourLabel(points[r.end].time)}", chip, if (r.level == FlightLevel.RED) Color(0xFFB3261E) else Color(0xFF8A6D00), advice))
+      val advice = if (r.level == FlightLevel.RED) "No despegar: la ráfaga supera el límite de tu dron. Espera a que baje." else "Ráfagas de ${formatSpeed(minG, unit)} a ${formatSpeed(maxG, unit)}: precaución, el dron ligero sufre y la toma 360° se mueve."
+      cards.add(WindowCard("Evita volar · ${hourLabel(points[r.start].time)}–${hourLabel(points[r.end].time)}", chip, if (r.level == FlightLevel.RED) Geo.Red else Geo.Amber, advice))
     }
   }
   calmAfter?.let { r ->
     val minG = points.subList(r.start, r.end + 1).minOf { it.gust10 }
     val maxG = points.subList(r.start, r.end + 1).maxOf { it.gust10 }
-    cards.add(WindowCard("Se calma · ${hourLabel(points[r.start].time)}–${hourLabel(points[r.end].time)}", "VERDE", Color(0xFF1B7A3D), "Las ráfagas bajan de %.1f a %.1f m/s. Solo aplica para vuelos cortos con luz suficiente.".format(maxG, minG)))
+    cards.add(WindowCard("Se calma · ${hourLabel(points[r.start].time)}–${hourLabel(points[r.end].time)}", "VERDE", Geo.Green, "Las ráfagas bajan de ${formatSpeed(maxG, unit)} a ${formatSpeed(minG, unit)}. Solo aplica para vuelos cortos con luz suficiente."))
   }
   if (cards.isEmpty()) return
-  Text("Ventanas del día", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+  Text("Ventanas del día", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Geo.Text)
   Spacer(Modifier.height(8.dp))
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
     cards.take(2).forEach { c -> WindowCardBox(c, Modifier.weight(1f)) }
@@ -85,11 +82,11 @@ fun WindowCards(hourly: List<HourlyPoint>, limit: Double) {
 
 @Composable
 private fun WindowCardBox(c: WindowCard, modifier: Modifier = Modifier) {
-  Card(modifier, colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EEF2))) {
+  GeoCard(modifier) {
     Column(Modifier.padding(12.dp)) {
-      Text(c.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+      Text(c.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Geo.Text)
       Text(c.chip, color = c.color, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-      Text(c.text, style = MaterialTheme.typography.bodySmall)
+      Text(c.text, style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
     }
   }
 }

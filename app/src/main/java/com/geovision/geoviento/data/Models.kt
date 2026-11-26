@@ -3,19 +3,27 @@ package com.geovision.geoviento.data
 // Una línea del diagnóstico de conexión que se muestra en la app.
 data class DiagEntry(val source: String, val ok: Boolean, val detail: String, val ms: Long)
 
+// Índice Kp (NOAA SWPC): valor estimado más reciente y su hora. Null si
+// la consulta falló: la app lo muestra como "No disponible".
+data class KpNow(val value: Double?, val time: String?)
+
 // gust120Est es una ESTIMACIÓN (Open-Meteo no publica ráfagas a 120 m):
 // gust10 * (speed120 / speed10). Se muestra como "est." en la interfaz.
-data class WindNow(val speed10: Double, val dir10: Double, val gust10: Double, val speed80: Double?, val dir80: Double?, val speed120: Double?, val dir120: Double?, val gust120Est: Double?, val temp: Double?, val time: String?)
-data class HourlyPoint(val time: String, val speed10: Double, val gust10: Double, val speed120: Double?, val gust120Est: Double?, val dir10: Double = 0.0, val temp10: Double? = null, val precipProb: Double? = null)
+// visibilityM es la visibilidad en metros (Open-Meteo); null si la fuente
+// no la trae (met.no no la publica).
+data class WindNow(val speed10: Double, val dir10: Double, val gust10: Double, val speed80: Double?, val dir80: Double?, val speed120: Double?, val dir120: Double?, val gust120Est: Double?, val temp: Double?, val time: String?, val visibilityM: Double? = null)
+data class HourlyPoint(val time: String, val speed10: Double, val gust10: Double, val speed120: Double?, val gust120Est: Double?, val dir10: Double = 0.0, val temp10: Double? = null, val precipProb: Double? = null, val visibilityM: Double? = null, val precipMm: Double? = null)
 
 // Condiciones en superficie (demo): humedad, presión, UV, amanecer/atardecer,
 // temperatura máxima y ráfaga máxima del día, altitud del lugar.
-data class SurfaceNow(val humidity: Double?, val pressure: Double?, val uvIndex: Double?, val sunrise: String?, val sunset: String?, val tempMaxToday: Double?, val gustMaxToday: Double?, val gustMaxHour: String?, val precipProbNow: Double?, val elevation: Double?)
+// cloudCover es la nubosidad en % y precipMm la precipitación en mm de la
+// hora actual (Open-Meteo); null si la fuente no las trae.
+data class SurfaceNow(val humidity: Double?, val pressure: Double?, val uvIndex: Double?, val sunrise: String?, val sunset: String?, val tempMaxToday: Double?, val gustMaxToday: Double?, val gustMaxHour: String?, val precipProbNow: Double?, val elevation: Double?, val cloudCover: Double? = null, val precipMm: Double? = null)
 
 // Calidad del aire (Open-Meteo Air Quality API): AQI de EE. UU. y PM2.5.
 data class AirQualityNow(val aqiUs: Double?, val pm25: Double?)
 
-data class WindReport(val now: WindNow, val hourly: List<HourlyPoint>, val source: String, val lat: Double, val lon: Double, val surface: SurfaceNow? = null, val air: AirQualityNow? = null, val placeName: String? = null)
+data class WindReport(val now: WindNow, val hourly: List<HourlyPoint>, val source: String, val lat: Double, val lon: Double, val surface: SurfaceNow? = null, val air: AirQualityNow? = null, val placeName: String? = null, val kp: KpNow? = null)
 
 // Opciones de dron para el informe y el semáforo: lista completa de DJI
 // con su resistencia máxima al viento publicada por DJI (m/s).

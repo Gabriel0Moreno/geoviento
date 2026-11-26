@@ -1,139 +1,138 @@
 package com.geovision.geoviento.ui
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.geovision.geoviento.data.WindReport
-import java.time.LocalTime
-import java.time.format.DateTimeFormatter
 
-// Tarjeta "Ojo con la tarde" de la demo: si las ráfagas de la tarde suben,
-// avisa a qué hora y recomienda volar en la mañana.
+// Aviso si la primera tarde con viento fuerte llega hoy, y en qué sentido
+// va a girar el viento en la tarde. Solo se mira la tarde DE HOY.
 @Composable
 fun AfternoonWarning(report: WindReport, limit: Double) {
+  // Solo la tarde DE HOY: el pronóstico ya trae 72 h y sin el filtro
+  // por fecha el aviso podría dispararse por la tarde de mañana.
+  val todayStr = (report.now.time ?: "").substringBefore("T")
   val afternoon = report.hourly.filter {
     val h = it.time.substringAfter("T").substringBefore(":").toIntOrNull() ?: 0
-    h in 13..18
+    it.time.startsWith(todayStr) && h in 13..18
   }
   val firstBad = afternoon.firstOrNull { it.gust10 >= limit * 0.75 }
+  val turn = firstBad?.let {
+    val before = afternoon.filter { hourInt(it.time) < hourInt(firstBad.time) }.lastOrNull()
+    val b = before?.dir10 ?: report.now.dir10
+    val d = firstBad.dir10
+    val diff = (d - b + 540) % 360 - 180
+    if (kotlin.math.abs(diff) > 45) diff else null
+  }
   if (firstBad == null) return
-  val hour = firstBad.time.substringAfter("T").substringBefore(":")
-  // Dirección de la tarde POR DATOS (v1.2.2): antes decía fijo
-  // "noroeste", el patrón de Tuxtla; en otra ciudad era información
-  // incorrecta. Solo se habla de giro si la tarde cambia > 45°.
-  val turn = kotlin.math.abs((firstBad.dir10 - report.now.dir10 + 540) % 360 - 180) > 45
-  Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))) {
+  GeoCard(Modifier.fillMaxWidth()) {
     Column(Modifier.padding(12.dp)) {
-      Text(if (turn) "Ojo con la tarde: el viento gira al ${compass(firstBad.dir10)} y se acelera desde las $hour:00." else "Ojo con la tarde: el viento se acelera desde las $hour:00.", fontWeight = FontWeight.Bold)
-      Text("Si tu trabajo es foto de terrenos o tour 360°, programa el vuelo antes del mediodía y deja la tarde para editar.", style = MaterialTheme.typography.bodySmall)
+      Text(
+        "Ojo con la tarde: a las " + hourLabel(firstBad.time) + " la ráfaga sube a %.1f m/s.".format(firstBad.gust10),
+        color = Geo.WarnText, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold
+      )
+      if (turn != null) {
+        Text(
+          "El viento gira " + (if (turn > 0) "a la derecha" else "a la izquierda") + " en la tarde: programa el regreso.",
+          color = Geo.WarnText, style = MaterialTheme.typography.bodyMedium
+        )
+      }
     }
   }
 }
 
-// Leyenda del semáforo de la demo, según el límite del dron elegido.
 @Composable
-fun SemaphoreLegend(limit: Double) {
-  val green = limit * 0.75
+fun SemaphoreLegend() {
+  Column(Modifier.fillMaxWidth()) {
+    Text("Semáforo: verde = vuela tranquilo · amarillo = con cuidado · rojo = no vueles", color = Geo.Muted, style = MaterialTheme.typography.bodySmall)
+    Text("El límite es el de tu dron. La ráfaga es la que manda, no el viento sostenido.", color = Geo.Muted, style = MaterialTheme.typography.bodySmall)
+  }
+}
+
+// Condiciones en superficie (demo): tiles de humedad, presión, UV,
+// amanecer/atardecer y calidad del aire. v1.3.0: se quitaron el tile del
+// semáforo (lo repite el banner de inicio) y el de prob. de lluvia (lo
+// repite la tarjeta 2×2 de inicio).
+@Composable
+fun SurfaceConditions(report: WindReport) {
+  val s = report.surface ?: return
+  val tiles = listOf(
+    Triple("HUMEDAD", s.humidity?.let { "%.0f%%".format(it) } ?: "—", "Humedad relativa"),
+    Triple("PRESIÓN", s.pressure?.let { "%.0f hPa".format(it) } ?: "—", "Presión en superficie"),
+    Triple(
+      "ÍNDICE UV",
+      s.uvIndex?.let { "%.1f".format(it) } ?: "—",
+      when {
+        s.uvIndex == null -> "Sin dato"
+        s.uvIndex < 3 -> "Bajo"
+        s.uvIndex < 6 -> "Moderado"
+        s.uvIndex < 8 -> "Alto"
+        s.uvIndex < 11 -> "Muy alto"
+        else -> "Extremo"
+      }
+    ),
+    Triple(
+      "AMANECER / ATARDECER",
+      (s.sunrise?.substringAfter("T") ?: "—") + " / " + (s.sunset?.substringAfter("T") ?: "—"),
+      s.sunrise?.let { sr ->
+        s.sunset?.let { ss ->
+          val h1 = sr.substringAfter("T").substringBefore(":").toIntOrNull() ?: 0
+          val m1 = sr.substringAfter(":").substringBefore(":").toIntOrNull() ?: 0
+          val h2 = ss.substringAfter("T").substringBefore(":").toIntOrNull() ?: 0
+          val m2 = ss.substringAfter(":").substringBefore(":").toIntOrNull() ?: 0
+          val mins = (h2 * 60 + m2) - (h1 * 60 + m1)
+          if (mins > 0) "Luz de día: ${mins / 60} h ${mins % 60} min" else "Luz de día: —"
+        }
+      } ?: "Luz de día: —"
+    ),
+    Triple(
+      "CALIDAD DEL AIRE",
+      report.air?.aqiUs?.let { "AQI %.0f".format(it) } ?: "—",
+      run {
+        val aqi = report.air?.aqiUs
+        val pm = report.air?.pm25?.let { " · PM2.5 %.1f".format(it) } ?: ""
+        when {
+          aqi == null -> "Sin dato"
+          aqi <= 50 -> "Buena$pm"
+          aqi <= 100 -> "Moderada$pm"
+          aqi <= 150 -> "Dañina para sensibles"
+          else -> "Dañina"
+        }
+      }
+    )
+  )
   Column {
-    Text("Verde ráfaga < %.1f m/s – vuela normal".format(green), style = MaterialTheme.typography.bodySmall)
-    Text("Amarillo %.1f–%.1f m/s – precaución, el dron ligero sufre".format(green, limit), style = MaterialTheme.typography.bodySmall)
-    Text("Rojo ráfaga ≥ %.1f m/s – no despegar".format(limit), style = MaterialTheme.typography.bodySmall)
-  }
-}
-
-private fun hhmm(iso: String?): String {
-  if (iso.isNullOrBlank()) return "—"
-  return try {
-    LocalTime.parse(iso.substringAfter("T").substringBefore("Z")).format(DateTimeFormatter.ofPattern("H:mm"))
-  } catch (_: Exception) {
-    iso.substringAfter("T").substringBefore(":")
-  }
-}
-
-private fun daylight(sunrise: String?, sunset: String?): String {
-  return try {
-    if (sunrise.isNullOrBlank() || sunset.isNullOrBlank()) return "—"
-    val s = LocalTime.parse(sunrise.substringAfter("T"))
-    val e = LocalTime.parse(sunset.substringAfter("T"))
-    val mins = java.time.Duration.between(s, e).toMinutes()
-    "${mins / 60}h ${mins % 60} min de luz"
-  } catch (_: Exception) {
-    "—"
-  }
-}
-
-// Condiciones en superficie de la demo: semáforo, humedad, presión,
-// probabilidad de lluvia, UV, amanecer/atardecer y calidad del aire.
-// (La dirección ya está en la brújula, no se repite aquí.)
-@Composable
-fun SurfaceConditions(report: WindReport, limit: Double) {
-  val n = report.now
-  val s = report.surface
-  val a = report.air
-  val level = flightLevel(n.gust10, limit)
-  val levelColor = when (level) {
-    FlightLevel.GREEN -> Color(0xFF1B7A3D)
-    FlightLevel.YELLOW -> Color(0xFF8A6D00)
-    FlightLevel.RED -> Color(0xFFB3261E)
-  }
-  val levelName = when (level) {
-    FlightLevel.GREEN -> "VERDE"
-    FlightLevel.YELLOW -> "AMARILLO"
-    FlightLevel.RED -> "ROJO"
-  }
-  val maxPrecip = report.hourly.mapNotNull { it.precipProb }.maxOrNull()
-  val maxPrecipHour = report.hourly.firstOrNull { it.precipProb == maxPrecip }?.time?.substringAfter("T")?.substringBefore(":")
-  val uv = s?.uvIndex
-  val uvText = when {
-    uv == null -> "—"
-    uv < 3 -> "Bajo"
-    uv < 6 -> "Moderado"
-    uv < 8 -> "Alto"
-    uv < 11 -> "Muy alto"
-    else -> "Extremo"
-  }
-  val aqi = a?.aqiUs
-  val aqiText = when {
-    aqi == null -> "—"
-    aqi <= 50 -> "Buena"
-    aqi <= 100 -> "Moderada"
-    aqi <= 150 -> "Dañina para grupos sensibles"
-    else -> "Dañina"
-  }
-  Text("Condiciones en superficie", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-  Text("Ahora", style = MaterialTheme.typography.bodySmall)
-  Spacer(Modifier.height(8.dp))
-  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    SurfaceTile("SEMÁFORO AHORA", levelName, "%.1f m/s está %s del límite".format(n.gust10, if (level == FlightLevel.GREEN) "muy debajo" else "cerca"), Modifier.weight(1f), levelColor)
-  }
-  Spacer(Modifier.height(8.dp))
-  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    SurfaceTile("HUMEDAD", s?.humidity?.let { "%.0f %%".format(it) } ?: "—", if ((s?.humidity ?: 0.0) >= 90) "Amanecer húmedo: revisa que el lente no se empañe" else "—", Modifier.weight(1f))
-    SurfaceTile("PRESIÓN", s?.pressure?.let { "%.0f hPa".format(it) } ?: "—", "Presión en superficie", Modifier.weight(1f))
-  }
-  Spacer(Modifier.height(8.dp))
-  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    SurfaceTile("PROB. LLUVIA", s?.precipProbNow?.let { "%.0f %%".format(it) } ?: "—", if (maxPrecip != null && maxPrecipHour != null) "Sube solo a %.0f%% a las %s:00".format(maxPrecip, maxPrecipHour) else "—", Modifier.weight(1f))
-    SurfaceTile("ÍNDICE UV", uv?.let { "%.0f".format(it) } ?: "—", uvText, Modifier.weight(1f))
-  }
-  Spacer(Modifier.height(8.dp))
-  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-    SurfaceTile("AMANECER / ATARDECER", "${hhmm(s?.sunrise)} / ${hhmm(s?.sunset)}", daylight(s?.sunrise, s?.sunset), Modifier.weight(1f))
-    SurfaceTile("CALIDAD DEL AIRE", aqi?.let { "%.0f ICA".format(it) } ?: "—", "$aqiText${a?.pm25?.let { " (PM2.5 %.0f)".format(it) } ?: ""}", Modifier.weight(1f))
+    SectionTitle("Condiciones en superficie")
+    Spacer(Modifier.height(8.dp))
+    for (row in tiles.chunked(2)) {
+      Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        row.forEach { (label, value, sub) ->
+          SurfaceTile(label, value, sub, Modifier.weight(1f))
+        }
+        if (row.size == 1) Spacer(Modifier.weight(1f))
+      }
+      Spacer(Modifier.height(8.dp))
+    }
   }
 }
 
 @Composable
-private fun SurfaceTile(title: String, value: String, sub: String, modifier: Modifier = Modifier, valueColor: Color? = null) {
-  Card(modifier, colors = CardDefaults.cardColors(containerColor = Color(0xFFE8EEF2))) {
+private fun SurfaceTile(label: String, value: String, sub: String, modifier: Modifier = Modifier) {
+  GeoCard(modifier) {
     Column(Modifier.padding(12.dp)) {
-      Text(title, style = MaterialTheme.typography.bodySmall)
-      Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = valueColor ?: Color.Unspecified)
-      Text(sub, style = MaterialTheme.typography.bodySmall)
+      Text(label, color = Geo.Muted, style = MaterialTheme.typography.labelSmall)
+      Text(value, color = Geo.Text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+      Text(sub, color = Geo.Muted, style = MaterialTheme.typography.bodySmall)
     }
   }
 }

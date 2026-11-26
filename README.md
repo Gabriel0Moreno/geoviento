@@ -77,6 +77,7 @@ compilarse: falló antes de descargar dependencias o compilar nada.
 3. Reintentar en otra VM/servidor con Gradle funcional.
 
 ## Estado de compilación
+- 2026-11-26: en esta VM sigue sin poder compilarse (bloqueo del sandbox: el IPC cliente↔daemon de Gradle por loopback es interceptado — el cliente recibe el texto "muse: Other TCP connections is turned off..." en vez del mensaje del daemon; causa raíz probada con una reproducción limpia Java↔Java. `assembleDebug` no llega al código). El código 1.3.0 se verificó por revisión completa (ver CHANGELOG 1.3.0). Compilar por GitHub Actions al subir.
 - 2026-11-11: en esta VM no se pudo compilar (daemon de Gradle falla con "Unexpected type tag 109", build nunca llegó al código). JDK 17, SDK 34 y Gradle 8.7 sí quedaron instalados aquí.
 - GitHub Actions (`/.github/workflows/android.yml`) compila la APK en cada push a main. Descarga: Actions > run > Artifacts > geoviento-debug-apk. Con tag `vX.Y.Z` además crea un Release con la APK.
-- Versión actual: 1.2.4 (versionCode 18). Para actualizar, ver `docs/ACTUALIZACIONES.md` y `CHANGELOG.md`. Al instalar una APK nueva de Actions, desinstalar primero la anterior: cada build se firma con una clave distinta.
+- Versión actual: 1.3.0 (versionCode 19). Para actualizar, ver `docs/ACTUALIZACIONES.md` y `CHANGELOG.md`. Al instalar una APK nueva de Actions, desinstalar primero la anterior: cada build se firma con una clave distinta.

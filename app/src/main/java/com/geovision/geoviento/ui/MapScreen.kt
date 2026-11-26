@@ -53,7 +53,8 @@ fun CurrentsMap(
   dirFrom: Double, gust10: Double,
   playing: Boolean, intensity: Float,
   selectedZone: String?, onZoneSelected: (String) -> Unit,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  limit: Double = 10.7
 ) {
   var sizePx by remember { mutableStateOf(IntSize.Zero) }
   val transition = rememberInfiniteTransition(label = "flujo")
@@ -84,12 +85,12 @@ fun CurrentsMap(
       }
   ) {
     val w = size.width; val h = size.height
-    drawRect(Color(0xFFE8F0E4))
+    drawRect(Color(0xFF12283A))
     // Franja del Cañón del Sumidero (diagonal).
     drawLine(Color(0xFF8FA8BF), Offset(w * 0.55f, 0f), Offset(w * 0.95f, h * 0.55f), strokeWidth = h * 0.16f)
     drawLine(Color(0xFF5B7A99), Offset(w * 0.55f, 0f), Offset(w * 0.95f, h * 0.55f), strokeWidth = h * 0.03f)
     // Flechas de corriente en la dirección real del viento, con animación de flujo.
-    val arrowColor = if (gust10 >= 10.7) Color(0xFFB3261E) else if (gust10 >= 8.0) Color(0xFF8A6D00) else Color(0xFF1B7A3D)
+    val arrowColor = when (flightLevel(gust10, limit)) { FlightLevel.RED -> Geo.Red; FlightLevel.YELLOW -> Geo.Amber; FlightLevel.GREEN -> Geo.Green }
     val starts = listOf(Offset(w * 0.15f, h * 0.30f), Offset(w * 0.35f, h * 0.55f), Offset(w * 0.60f, h * 0.75f))
     for ((i, s0) in starts.withIndex()) {
       // Cada flecha avanza y vuelve: el desplazamiento depende de la animación.
@@ -104,7 +105,7 @@ fun CurrentsMap(
       drawLine(arrowColor, e, Offset((e.x + cos(a2) * 28).toFloat(), (e.y + sin(a2) * 28).toFloat()), strokeWidth = 6f)
     }
     // Zonas (la seleccionada se marca con anillo).
-    val paint = Paint().apply { color = android.graphics.Color.DKGRAY; textSize = 30f }
+    val paint = Paint().apply { color = android.graphics.Color.parseColor("#F2F6F9"); textSize = 30f }
     for (z in TUxtla_ZONES) {
       val p = Offset(w * z.fx, h * z.fy)
       if (z.name == selectedZone) {
@@ -121,14 +122,14 @@ fun CurrentsMap(
 fun WindCompass(dirFrom: Double, modifier: Modifier = Modifier) {
   Canvas(modifier = modifier.size(120.dp)) {
     val c = center; val r = size.minDimension / 2f - 8f
-    drawCircle(Color(0xFFE8EEF2), radius = r, center = c)
-    drawCircle(Color(0xFF0A2E4D), radius = r, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f))
+    drawCircle(Geo.Card2, radius = r, center = c)
+    drawCircle(Geo.Accent, radius = r, center = c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 4f))
     // Flecha: apunta hacia donde VA el viento (dirFrom + 180).
     rotate((dirFrom + 180.0).toFloat(), pivot = c) {
-      drawLine(Color(0xFFB3261E), Offset(c.x, c.y + r * 0.7f), Offset(c.x, c.y - r * 0.7f), strokeWidth = 8f)
-      drawCircle(Color(0xFFB3261E), radius = 10f, center = c)
+      drawLine(Geo.Red, Offset(c.x, c.y + r * 0.7f), Offset(c.x, c.y - r * 0.7f), strokeWidth = 8f)
+      drawCircle(Geo.Red, radius = 10f, center = c)
     }
-    val paint = Paint().apply { color = android.graphics.Color.BLACK; textSize = 34f; textAlign = Paint.Align.CENTER }
+    val paint = Paint().apply { color = android.graphics.Color.parseColor("#F2F6F9"); textSize = 34f; textAlign = Paint.Align.CENTER }
     drawIntoCanvas {
       it.nativeCanvas.drawText("N", c.x, c.y - r + 34f, paint)
       it.nativeCanvas.drawText("S", c.x, c.y + r - 8f, paint)

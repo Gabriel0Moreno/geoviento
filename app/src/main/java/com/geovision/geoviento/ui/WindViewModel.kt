@@ -4,8 +4,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.geovision.geoviento.data.*
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -27,6 +29,28 @@ class WindViewModel(app: Application) : AndroidViewModel(app) {
 
   // Dron elegido (semáforo e informe PDF). Por defecto el DJI Lito X1.
   val drone = MutableStateFlow(DRONES[0])
+
+  // Preferencias de vuelo (v1.3.0): se cargan del teléfono al arrancar
+  // y se guardan cada vez que el usuario las cambia en Más >
+  // Preferencias de vuelo. Con el margen en 0% (por defecto) el
+  // semáforo es exactamente el de siempre.
+  val prefs = MutableStateFlow(PrefsStore.load(context))
+
+  fun updatePrefs(p: FlightPrefs) {
+    prefs.value = p
+    PrefsStore.save(context, p)
+  }
+
+  // Frames del radar de lluvia (RainViewer, v1.3.0): se cargan al abrir
+  // la pestaña Mapa y nunca bloquean nada. Lista vacía = sin radar.
+  val radarFrames = MutableStateFlow<List<String>>(emptyList())
+
+  fun refreshRadar() {
+    viewModelScope.launch {
+      val frames = withContext(Dispatchers.IO) { repo.fetchRadarFrames() }
+      if (frames.isNotEmpty()) radarFrames.value = frames
+    }
+  }
 
   // Sección del informe PDF: día consultado, su reporte y la referencia del archivo.
   val dayReport = MutableStateFlow<DayReport?>(null)

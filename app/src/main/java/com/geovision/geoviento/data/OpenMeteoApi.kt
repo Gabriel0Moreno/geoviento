@@ -7,16 +7,16 @@ import retrofit2.http.Query
 // La ráfaga a 120 m se ESTIMA en WindRepository como gust10 * (speed120 / speed10).
 // Las listas horarias son nulables: si la API devuelve una más corta o en null,
 // el repositorio combina solo el índice mínimo común en vez de romperse.
-data class OmCurrent(val time: String?, val temperature_2m: Double?, val relative_humidity_2m: Double?, val surface_pressure: Double?, val uv_index: Double?, val wind_speed_10m: Double?, val wind_direction_10m: Double?, val wind_gusts_10m: Double?, val wind_speed_80m: Double?, val wind_direction_80m: Double?, val wind_speed_120m: Double?, val wind_direction_120m: Double?)
-data class OmHourly(val time: List<String>?, val temperature_2m: List<Double>?, val precipitation_probability: List<Double>?, val wind_speed_10m: List<Double>?, val wind_direction_10m: List<Double>?, val wind_gusts_10m: List<Double>?, val wind_speed_80m: List<Double>?, val wind_direction_80m: List<Double>?, val wind_speed_120m: List<Double>?, val wind_direction_120m: List<Double>?)
+data class OmCurrent(val time: String?, val temperature_2m: Double?, val relative_humidity_2m: Double?, val surface_pressure: Double?, val uv_index: Double?, val wind_speed_10m: Double?, val wind_direction_10m: Double?, val wind_gusts_10m: Double?, val wind_speed_80m: Double?, val wind_direction_80m: Double?, val wind_speed_120m: Double?, val wind_direction_120m: Double?, val visibility: Double?, val cloud_cover: Double?, val precipitation: Double?)
+data class OmHourly(val time: List<String>?, val temperature_2m: List<Double>?, val precipitation_probability: List<Double>?, val wind_speed_10m: List<Double>?, val wind_direction_10m: List<Double>?, val wind_gusts_10m: List<Double>?, val wind_speed_80m: List<Double>?, val wind_direction_80m: List<Double>?, val wind_speed_120m: List<Double>?, val wind_direction_120m: List<Double>?, val visibility: List<Double>?, val precipitation: List<Double>?)
 data class OmDaily(val time: List<String>?, val sunrise: List<String>?, val sunset: List<String>?, val temperature_2m_max: List<Double>?, val wind_gusts_10m_max: List<Double>?)
 data class OmResponse(val elevation: Double?, val current: OmCurrent?, val hourly: OmHourly?, val daily: OmDaily?)
 interface OpenMeteoApi {
   @GET("v1/forecast")
   suspend fun forecast(
     @Query("latitude") lat: Double, @Query("longitude") lon: Double,
-    @Query("current") current: String = "temperature_2m,relative_humidity_2m,surface_pressure,uv_index,wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m",
-    @Query("hourly") hourly: String = "temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m",
+    @Query("current") current: String = "temperature_2m,relative_humidity_2m,surface_pressure,uv_index,wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m,visibility,cloud_cover,precipitation",
+    @Query("hourly") hourly: String = "temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m,wind_gusts_10m,wind_speed_80m,wind_direction_80m,wind_speed_120m,wind_direction_120m,visibility,precipitation",
     @Query("daily") daily: String = "sunrise,sunset,temperature_2m_max,wind_gusts_10m_max",
     @Query("wind_speed_unit") unit: String = "ms", @Query("forecast_days") days: Int = 3,
     @Query("timezone") tz: String = "America/Mexico_City"

@@ -1,4 +1,4 @@
-// Mapa REAL con calles en un WebView (Leaflet + baldosas OpenStreetMap).
+// Mapa REAL con calles en un WebView (Leaflet + baldosas).
 //
 // El mapa nativo de MapLibre 10.2.0 tumbaba la app en el moto g75 al
 // cargarlo ("Geoviento Mx continúa fallando" tras "Cargando mapa...") con
@@ -21,6 +21,18 @@
 // altura real del contenedor #map; (3) hay una línea de diagnóstico
 // visible bajo el mapa con el resultado de la comprobación, para saber
 // en el teléfono qué falló sin adivinar.
+//
+// v1.3.0: capa base oscura CartoDB Dark Matter (a juego con el tema
+// oscuro de la app) con respaldo automático a OSM si las teselas oscuras
+// fallan (a partir de 4 errores de tesela se cambia la base y se anota
+// en el diagnóstico; el mapa NO cae al esquema por eso). Capa de radar
+// de lluvia animada (RainViewer, API pública sin llave): los frames se
+// piden en Kotlin (WindRepository.fetchRadarFrames) y se pasan por
+// setRadarFrames; la animación cicla los frames cada 700 ms con
+// play/pausa. Si no hay frames, el radar no se muestra y nada falla.
+// La capa "Clima" es un overlay de la app (nubosidad/precipitación de
+// Open-Meteo), no una tesela: el satélite de RainViewer venía vacío en
+// la respuesta del 2026-11-26 y no se puede depender de él.
 package com.geovision.geoviento.ui
 
 import android.annotation.SuppressLint
@@ -41,7 +53,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -51,7 +62,8 @@ import org.json.JSONObject
 
 class ZoneBridge(
   private val onZone: (String) -> Unit,
-  private val onError: () -> Unit
+  private val onError: () -> Unit,
+  private val onBase: (String) -> Unit = {}
 ) {
   private val main = Handler(Looper.getMainLooper())
 
@@ -64,6 +76,13 @@ class ZoneBridge(
   fun onMapError() {
     main.post { onError() }
   }
+
+  // La base oscura no cargó y el mapa cambió solo a OSM: solo se anota,
+  // no es un error fatal y el mapa sigue.
+  @JavascriptInterface
+  fun onBaseLayer(name: String) {
+    main.post { onBase(name) }
+  }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -71,7 +90,11 @@ class ZoneBridge(
 fun WebMap(
   lat: Double, lon: Double, dir: Double, gust: Double, limit: Double,
   playing: Boolean, intensity: Float, selectedZone: String?, onZone: (String) -> Unit,
-  fallback: @Composable () -> Unit
+  fallback: @Composable () -> Unit,
+  radarFrames: List<String> = emptyList(),
+  radarVisible: Boolean = false,
+  radarPlaying: Boolean = false,
+  arrowsVisible: Boolean = true
 ) {
   var webView by remember { mutableStateOf<WebView?>(null) }
   var pageLoaded by remember { mutableStateOf(false) }
@@ -79,6 +102,8 @@ fun WebMap(
   // Diagnóstico visible del mapa (v1.2.4): qué encontró la comprobación,
   // para saber en el teléfono qué falló sin adivinar.
   var mapStatus by remember { mutableStateOf("Mapa: cargando…") }
+  // Qué capa base está activa (oscura por defecto; OSM si falló).
+  var baseName by remember { mutableStateOf("oscura") }
   // Leaflet local (assets): se lee una sola vez; si fallara, la página
   // no tendría L y la verificación de 8 s caería al esquema.
   val context = LocalContext.current
@@ -105,7 +130,7 @@ fun WebMap(
   if (webFailed) {
     fallback()
     Spacer(Modifier.height(4.dp))
-    Text(mapStatus, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+    Text(mapStatus, style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
     return
   }
   Box(Modifier.fillMaxWidth().height(300.dp)) {
@@ -116,7 +141,7 @@ fun WebMap(
           settings.domStorageEnabled = true
           settings.allowFileAccess = true
           settings.allowUniversalAccessFromFileURLs = true
-          addJavascriptInterface(ZoneBridge(onZone) { mapStatus = "Mapa: error de la página → esquema"; webFailed = true }, "Android")
+          addJavascriptInterface(ZoneBridge(onZone, { mapStatus = "Mapa: error de la página → esquema"; webFailed = true }) { name -> baseName = name }, "Android")
           webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
               pageLoaded = true
@@ -168,7 +193,7 @@ fun WebMap(
                     val hasL = parts.getOrNull(0) == "true"
                     val ready = parts.getOrNull(1) == "true"
                     val h = parts.getOrNull(2)?.toIntOrNull() ?: -1
-                    mapStatus = "Mapa: Leaflet " + if (hasL) "✓" else "✗" + " · listo " + if (ready) "✓" else "✗" + " · alto " + h + " px"
+                    mapStatus = "Mapa: Leaflet " + if (hasL) "✓" else "✗" + " · listo " + if (ready) "✓" else "✗" + " · alto " + h + " px · base " + baseName
                     if (!hasL || !ready || h <= 50) webFailed = true
                   }
                 } catch (_: Exception) {
@@ -185,12 +210,12 @@ fun WebMap(
     )
     if (!pageLoaded) {
       Box(Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
-        Text("Cargando mapa…")
+        Text("Cargando mapa…", color = Geo.Muted)
       }
     }
   }
   Spacer(Modifier.height(4.dp))
-  Text(mapStatus, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+  Text(mapStatus, style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
   LaunchedEffect(pageLoaded, dir, gust) {
     if (pageLoaded) webView?.evaluateJavascript("updateWind($dir, $gust)", null)
   }
@@ -206,28 +231,60 @@ fun WebMap(
       webView?.evaluateJavascript("selectZone($arg)", null)
     }
   }
+  // Capas (v1.3.0): las rutas de los frames son /v2/radar/<hex>, sin
+  // comillas ni caracteres raros, así que el JSON se puede interpolar
+  // directo en la llamada JS.
+  LaunchedEffect(pageLoaded, radarFrames) {
+    if (pageLoaded && radarFrames.isNotEmpty()) {
+      val json = JSONArray().apply { radarFrames.forEach { put(it) } }.toString()
+      webView?.evaluateJavascript("setRadarFrames($json)", null)
+    }
+  }
+  LaunchedEffect(pageLoaded, radarVisible) {
+    if (pageLoaded) webView?.evaluateJavascript("setRadarVisible($radarVisible)", null)
+  }
+  LaunchedEffect(pageLoaded, radarPlaying) {
+    if (pageLoaded) webView?.evaluateJavascript("setRadarPlaying($radarPlaying)", null)
+  }
+  LaunchedEffect(pageLoaded, arrowsVisible) {
+    if (pageLoaded) webView?.evaluateJavascript("setArrowsVisible($arrowsVisible)", null)
+  }
 }
 
-// HTML del mapa: Leaflet + OSM, 5 zonas numeradas (tocar una avisa a la
-// app) y flechas que se mueven con el viento. Sin template literals de JS
+// HTML del mapa: Leaflet + base oscura CartoDB (respaldo OSM), 5 zonas
+// numeradas (tocar una avisa a la app), flechas que se mueven con el
+// viento y capa de radar RainViewer animada. Sin template literals de JS
 // (${...}) para no chocar con las plantillas de Kotlin.
 private fun buildWebMapHtml(zonesJson: String, lat: Double, lon: Double, dir: Double, gust: Double, limit: Double, leafletCss: String, leafletJs: String): String {
   val raw = """
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <style>__LEAFLET_CSS__</style>
-<style>html,body{margin:0;height:100%}#map{height:100%;width:100%}.znum{background:#0A2E4D;color:#fff;border:2px solid #fff;border-radius:50%;width:26px;height:26px;line-height:22px;text-align:center;font-weight:bold;font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.4)}.znum.sel{background:#B3261E}.zlab{background:rgba(255,255,255,.92);border-radius:4px;padding:1px 5px;font-size:11px;font-weight:bold;white-space:nowrap}.arr{font-size:22px;line-height:1;text-shadow:0 0 3px #fff,0 0 3px #fff}</style>
+<style>html,body{margin:0;height:100%;background:#0A1622}#map{height:100%;width:100%;background:#0A1622}.znum{background:#0A2E4D;color:#fff;border:2px solid #fff;border-radius:50%;width:26px;height:26px;line-height:22px;text-align:center;font-weight:bold;font-size:14px;box-shadow:0 1px 4px rgba(0,0,0,.4)}.znum.sel{background:#B3261E}.zlab{background:rgba(10,22,34,.92);color:#F2F6F9;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:bold;white-space:nowrap}.arr{font-size:22px;line-height:1;text-shadow:0 0 3px #0A1622,0 0 3px #0A1622}</style>
 <script>__LEAFLET_JS__</script>
 </head><body><div id="map"></div>
 <script>
 var ZONES = __ZONES__;
 var DIR = __DIR__; var GUST = __GUST__; var LIMIT = __LIMIT__;
-var paused = false; var intensity = 1;
+var paused = false; var intensity = 1; var arrowsVisible = true;
 var map = null; var zoneMarkers = {}; var arrows = [];
-function flowColor(g){ return g < LIMIT*0.75 ? '#1B7A3D' : (g < LIMIT ? '#B8860B' : '#B3261E'); }
+var baseLayer = null; var osmLayer = null; var baseErrors = 0; var baseIsOsm = false;
+var radarPaths = []; var radarLayer = null; var radarIdx = 0; var radarTimer = null; var radarVisible = false; var radarPlaying = false;
+function flowColor(g){ return g < LIMIT*0.75 ? '#4CAF7D' : (g < LIMIT ? '#E0A800' : '#E5484D'); }
 function initMap(){
   if(typeof L === 'undefined' || map !== null) return;
   map = L.map('map', {zoomControl:false}).setView([__LAT__, __LON__], 12);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+  baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {maxZoom:19, attribution:'© OpenStreetMap © CARTO', subdomains:'abcd'});
+  osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'© OpenStreetMap'});
+  baseLayer.on('tileerror', function(){
+    if(baseIsOsm) return;
+    baseErrors++;
+    if(baseErrors >= 4){
+      baseIsOsm = true;
+      map.removeLayer(baseLayer); osmLayer.addTo(map);
+      if(window.Android) Android.onBaseLayer('OSM');
+    }
+  });
+  baseLayer.addTo(map);
   ZONES.forEach(function(z){
     var m = L.marker([z.lat, z.lon], {icon: L.divIcon({className:'', html:'<div class="znum" id="zn-'+z.n+'">'+z.n+'</div>', iconSize:[26,26], iconAnchor:[13,13]})}).addTo(map);
     m.bindTooltip(z.name, {permanent:true, direction:'top', offset:[0,-14], className:'zlab'});
@@ -253,6 +310,7 @@ function paintArrows(){
   arrows.forEach(function(a){
     var el = a.m.getElement(); if(!el) return;
     var d = el.querySelector('.arr'); if(!d) return;
+    d.style.display = arrowsVisible ? '' : 'none';
     d.style.color = c;
     d.style.transform = 'rotate(' + (DIR - 90) + 'deg)';
     d.style.opacity = (0.35 + 0.65*intensity).toFixed(2);
@@ -262,7 +320,7 @@ function paintArrows(){
 var last = 0;
 function tick(ts){
   requestAnimationFrame(tick);
-  if(map === null || paused) return;
+  if(map === null || paused || !arrowsVisible) return;
   if(!last) last = ts; var dt = Math.min(50, ts-last); last = ts;
   var toRad = DIR*Math.PI/180;
   var step = dt*0.00002*(0.5 + GUST/10);
@@ -272,6 +330,36 @@ function tick(ts){
     a.m.setLatLng([a.lat, a.lon]);
   });
 }
+function radarUrl(i){ return 'https://tilecache.rainviewer.com' + radarPaths[i] + '/256/{z}/{x}/{y}/2/1_1.png'; }
+function ensureRadarLayer(){
+  if(map === null || radarPaths.length === 0) return;
+  if(radarLayer !== null){ radarLayer.setUrl(radarUrl(radarIdx)); return; }
+  radarLayer = L.tileLayer(radarUrl(radarIdx), {opacity:0.6, zIndex:5, attribution:'© RainViewer'}).addTo(map);
+}
+function startRadarTimer(){
+  stopRadarTimer();
+  radarTimer = setInterval(function(){
+    if(radarPaths.length === 0) return;
+    radarIdx = (radarIdx + 1) % radarPaths.length;
+    if(radarLayer) radarLayer.setUrl(radarUrl(radarIdx));
+  }, 700);
+}
+function stopRadarTimer(){ if(radarTimer !== null){ clearInterval(radarTimer); radarTimer = null; } }
+function setRadarFrames(paths){
+  radarPaths = paths || []; radarIdx = 0;
+  if(radarVisible) { ensureRadarLayer(); if(radarLayer) radarLayer.addTo(map); if(radarPlaying) startRadarTimer(); }
+}
+function setRadarVisible(b){
+  radarVisible = b;
+  if(map === null) return;
+  if(b){ ensureRadarLayer(); if(radarLayer) radarLayer.addTo(map); if(radarPlaying) startRadarTimer(); }
+  else { stopRadarTimer(); if(radarLayer) map.removeLayer(radarLayer); }
+}
+function setRadarPlaying(b){
+  radarPlaying = b;
+  if(b && radarVisible && radarPaths.length > 0) startRadarTimer(); else stopRadarTimer();
+}
+function setArrowsVisible(b){ arrowsVisible = b; paintArrows(); }
 function updateWind(d, g){ DIR=d; GUST=g; paintArrows(); }
 function setPaused(b){ paused=b; }
 function setIntensity(x){ intensity=x; paintArrows(); }

@@ -4,6 +4,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.net.HttpURLConnection
@@ -38,6 +40,46 @@ class WindRepository {
   private val geoApi = retrofit("https://geocoding-api.open-meteo.com/").create(GeocodingApi::class.java)
   private val elevApi = retrofit("https://api.open-meteo.com/").create(ElevationApi::class.java)
   private val metNo = retrofit("https://api.met.no/").create(MetNoApi::class.java)
+  private val kpApi = retrofit("https://services.swpc.noaa.gov/").create(KpApi::class.java)
+
+  // Índice Kp (NOAA SWPC): nunca bloquea la carga del viento. Si falla,
+  // devuelve null y la app muestra "No disponible" en la tarjeta de Kp y
+  // en el diagnóstico, sin tocar el resto.
+  suspend fun fetchKp(): KpNow? = withContext(Dispatchers.IO) {
+    try {
+      val list = kpApi.kp()
+      val last = list.lastOrNull { it.estimated_kp != null } ?: return@withContext null
+      KpNow(last.estimated_kp, last.time_tag)
+    } catch (_: Exception) {
+      null
+    }
+  }
+
+  // Radar de lluvia (RainViewer, API pública sin llave, v1.3.0): devuelve
+  // las rutas de los frames de radar pasados (hasta 13, cada 10 min).
+  // La tesela de un frame es https://tilecache.rainviewer.com{path}/
+  // 256/{z}/{x}/{y}/2/1_1.png (verificado 2026-11-26: HTTP 200, PNG).
+  // Si la consulta falla o no hay internet, devuelve lista vacía: el
+  // radar simplemente no se muestra y la app sigue normal, sin errores.
+  // El satélite infrarrojo de la misma API venía vacío en la respuesta
+  // del 2026-11-26, así que la capa "Clima" no depende de él.
+  suspend fun fetchRadarFrames(): List<String> = withContext(Dispatchers.IO) {
+    try {
+      val req = Request.Builder()
+        .url("https://api.rainviewer.com/public/weather-maps.json")
+        .header("User-Agent", "GeovientoMx/1.3.0 (github.com/Gabriel0Moreno/geoviento)")
+        .build()
+      val body = http.newCall(req).execute().use { it.body?.string() } ?: return@withContext emptyList()
+      val past = JSONObject(body).optJSONObject("radar")?.optJSONArray("past") ?: return@withContext emptyList()
+      val out = mutableListOf<String>()
+      for (i in 0 until past.length()) {
+        past.optJSONObject(i)?.optString("path")?.takeIf { it.isNotBlank() }?.let { out.add(it) }
+      }
+      out
+    } catch (_: Exception) {
+      emptyList()
+    }
+  }
 
   // Diagnóstico de la última carga / prueba, para mostrarlo en la app.
   private val diagLock = Any()
@@ -76,16 +118,27 @@ class WindRepository {
           AirQualityNow(a?.us_aqi, a?.pm2_5)
         }.getOrNull()
       }
+      // El Kp se pide en paralelo y nunca bloquea: si NOAA no responde,
+      // el reporte llega con kp = null.
+      val kpD = async {
+        val t0 = System.currentTimeMillis()
+        val r = runCatching { fetchKp() }
+        val ms = System.currentTimeMillis() - t0
+        r.onSuccess { addDiag(DiagEntry("NOAA SWPC (Kp)", true, "respondió bien", ms)) }
+          .onFailure { addDiag(DiagEntry("NOAA SWPC (Kp)", false, it.message ?: "error sin mensaje", ms)) }
+        r.getOrNull()
+      }
       val om = omD.await()
       val met = metD.await()
       val air = aqD.await()
+      val kpNow = kpD.await()
       val base = if (om.isSuccess) om.getOrThrow()
         else if (met.isSuccess) met.getOrThrow()
         else throw IllegalStateException(
           "Open-Meteo falló (${om.exceptionOrNull()?.message}); " +
             "el respaldo met.no tampoco respondió (${met.exceptionOrNull()?.message})"
         )
-      base.copy(air = air)
+      base.copy(air = air, kp = kpNow)
     }
   }
 
@@ -95,6 +148,7 @@ class WindRepository {
     val out = mutableListOf<DiagEntry>()
     out.add(probe("Open-Meteo", "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m&wind_speed_unit=ms", null))
     out.add(probe("met.no", "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=$lat&lon=$lon", "GeovientoMx/1.1.0 (github.com/Gabriel0Moreno/geoviento)"))
+    out.add(probe("NOAA SWPC (Kp)", "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json", null))
     out
   }
 
@@ -207,7 +261,7 @@ class WindRepository {
     val s120 = h.wind_speed_120m?.getOrNull(i)
     val sp10 = safe(h.wind_speed_10m?.getOrNull(i))
     val gu10 = safe(h.wind_gusts_10m?.getOrNull(i))
-    return HourlyPoint(times.getOrNull(i) ?: "", sp10, gu10, s120, estimateGust(gu10, sp10, s120), safe(h.wind_direction_10m?.getOrNull(i)), h.temperature_2m?.getOrNull(i), h.precipitation_probability?.getOrNull(i))
+    return HourlyPoint(times.getOrNull(i) ?: "", sp10, gu10, s120, estimateGust(gu10, sp10, s120), safe(h.wind_direction_10m?.getOrNull(i)), h.temperature_2m?.getOrNull(i), h.precipitation_probability?.getOrNull(i), h.visibility?.getOrNull(i), h.precipitation?.getOrNull(i))
   }
 
   private fun buildArchiveHourly(h: OmArchiveHourly, i: Int): HourlyPoint {
@@ -223,24 +277,30 @@ class WindRepository {
     val h = r.hourly
     val d = r.daily
     // La ventana de 24 h empieza en la hora actual, no a medianoche.
+    // Se guardan hasta 72 h (forecast_days = 3) para las pestañas
+    // Hoy/Mañana/+2 días del pronóstico; lo que solo necesita 24 h
+    // sigue tomando take(24) como siempre.
     val times = h?.time ?: emptyList()
     val nowStr = c.time ?: ""
     val startIdx = times.indexOfFirst { it >= nowStr }.takeIf { it >= 0 } ?: 0
     val n = minOf(times.size, h?.wind_speed_10m?.size ?: 0, h?.wind_gusts_10m?.size ?: 0)
-    val hourly = (startIdx until minOf(n, startIdx + 24)).map { buildHourly(h!!, it) }
+    val hourly = (startIdx until minOf(n, startIdx + 72)).map { buildHourly(h!!, it) }
     val speed10 = safe(c.wind_speed_10m)
     val gust10 = safe(c.wind_gusts_10m)
     val gustMaxToday = d?.wind_gusts_10m_max?.firstOrNull()
-    val gustMaxHour = hourly.maxByOrNull { it.gust10 }?.time
+    // La hora de la ráfaga máxima es la DE HOY (el pronóstico ya trae
+    // 72 h para las pestañas; sin este filtro apuntaría a otro día).
+    val todayStr = (c.time ?: "").substringBefore("T")
+    val gustMaxHour = hourly.filter { it.time.startsWith(todayStr) }.maxByOrNull { it.gust10 }?.time
     val precipNow = h?.precipitation_probability?.getOrNull(startIdx)
     val surface = SurfaceNow(
       c.relative_humidity_2m, c.surface_pressure, c.uv_index,
       d?.sunrise?.firstOrNull(), d?.sunset?.firstOrNull(),
       d?.temperature_2m_max?.firstOrNull(), gustMaxToday, gustMaxHour,
-      precipNow, r.elevation
+      precipNow, r.elevation, c.cloud_cover, c.precipitation
     )
     return WindReport(
-      WindNow(speed10, safe(c.wind_direction_10m), gust10, c.wind_speed_80m, c.wind_direction_80m, c.wind_speed_120m, c.wind_direction_120m, estimateGust(gust10, speed10, c.wind_speed_120m), c.temperature_2m, c.time),
+      WindNow(speed10, safe(c.wind_direction_10m), gust10, c.wind_speed_80m, c.wind_direction_80m, c.wind_speed_120m, c.wind_direction_120m, estimateGust(gust10, speed10, c.wind_speed_120m), c.temperature_2m, c.time, c.visibility),
       hourly, "Open-Meteo", lat, lon, surface = surface
     )
   }

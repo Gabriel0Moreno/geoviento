@@ -24,34 +24,34 @@ import com.geovision.geoviento.data.TerrainProfile
 // usa si el perfil real no cargó y el lugar es Tuxtla.
 @Composable
 fun ReliefSection(terrain: TerrainProfile?, terrainLoading: Boolean, isTuxtla: Boolean) {
-  Text("Cómo se mueve el aire hoy sobre el relieve", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+  Text("Cómo se mueve el aire hoy sobre el relieve", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Geo.Text)
   if (terrain != null) {
     val from = (terrain.axisDirTo + 180) % 360
-    Text("CORTE REAL · VIENTO ${compass(from)} → ${compass(terrain.axisDirTo)} · 30 KM", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-    Text("Corte del terreno en la dirección del viento, de donde viene el aire hacia donde va. Las alturas son reales (Open-Meteo, elevación del terreno), no un dibujo: es el relieve que el aire tiene que cruzar sobre este lugar.", style = MaterialTheme.typography.bodySmall)
+    Text("CORTE REAL · VIENTO ${compass(from)} → ${compass(terrain.axisDirTo)} · 30 KM", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Geo.Text)
+    Text("Corte del terreno en la dirección del viento, de donde viene el aire hacia donde va. Las alturas son reales (Open-Meteo, elevación del terreno), no un dibujo: es el relieve que el aire tiene que cruzar sobre este lugar.", style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
     Spacer(Modifier.height(8.dp))
     RealProfileCanvas(terrain)
     Spacer(Modifier.height(8.dp))
-    Text("El lugar está a %.0f m. %s: el terreno va de %.0f m a %.0f m (desnivel %.0f m en 30 km).".format(terrain.elevAtLoc, terrain.kind, terrain.minElev, terrain.maxElev, terrain.range), style = MaterialTheme.typography.bodySmall)
+    Text("El lugar está a %.0f m. %s: el terreno va de %.0f m a %.0f m (desnivel %.0f m en 30 km).".format(terrain.elevAtLoc, terrain.kind, terrain.minElev, terrain.maxElev, terrain.range), style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
     if (terrain.maxClimb >= 150) {
-      Text("La subida más fuerte del corte es de %.0f m en 1.5 km: el aire se ve obligado a subir ahí y detrás del filo se arremolina. No vueles pegado a esa ladera.".format(terrain.maxClimb), style = MaterialTheme.typography.bodySmall)
+      Text("La subida más fuerte del corte es de %.0f m en 1.5 km: el aire se ve obligado a subir ahí y detrás del filo se arremolina. No vueles pegado a esa ladera.".format(terrain.maxClimb), style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
     }
     if (isTuxtla) {
       Spacer(Modifier.height(8.dp))
       TuxtlaTexts()
     } else {
       Spacer(Modifier.height(8.dp))
-      Text("Si tu ruta cruza el punto más alto del corte (%.0f m), súbelo con margen: en los pasos estrechos el aire se acelera y detrás de los filos cae y se arremolina.".format(terrain.maxElev), style = MaterialTheme.typography.bodySmall)
+      Text("Si tu ruta cruza el punto más alto del corte (%.0f m), súbelo con margen: en los pasos estrechos el aire se acelera y detrás de los filos cae y se arremolina.".format(terrain.maxElev), style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
     }
   } else if (isTuxtla) {
-    Text("ESQUEMA EDUCATIVO · VIENTO N-O", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
-    Text("Corte esquemático del valle, de norte a sur: el flujo dominante entra por la boca del Cañón del Sumidero, cruza la ciudad y choca con la Meseta de Copoya. No es un mapa ni una medición: es el patrón que debes anticipar al planear la ruta.", style = MaterialTheme.typography.bodySmall)
+    Text("ESQUEMA EDUCATIVO · VIENTO N-O", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Geo.Text)
+    Text("Corte esquemático del valle, de norte a sur: el flujo dominante entra por la boca del Cañón del Sumidero, cruza la ciudad y choca con la Meseta de Copoya. No es un mapa ni una medición: es el patrón que debes anticipar al planear la ruta.", style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
     Spacer(Modifier.height(8.dp))
     TuxtlaSchematic()
     Spacer(Modifier.height(8.dp))
     TuxtlaTexts()
   } else {
-    Text(if (terrainLoading) "Cargando el relieve de este lugar…" else "No se pudo cargar el relieve de este lugar (revisa tu internet y toca Actualizar ahora).", style = MaterialTheme.typography.bodySmall)
+    Text(if (terrainLoading) "Cargando el relieve de este lugar…" else "No se pudo cargar el relieve de este lugar (revisa tu internet y toca Actualizar ahora).", style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
   }
 }
 
@@ -87,7 +87,7 @@ private fun RealProfileCanvas(terrain: TerrainProfile) {
     drawCircle(Color(0xFFFFC107), 11f, Offset(cx, cy))
     drawCircle(Color.White, 4.5f, Offset(cx, cy))
     val paint = android.graphics.Paint().apply { color = android.graphics.Color.WHITE; textSize = 26f; isFakeBoldText = true }
-    val dark = android.graphics.Paint().apply { color = android.graphics.Color.DKGRAY; textSize = 24f; isFakeBoldText = true }
+    val dark = android.graphics.Paint().apply { color = android.graphics.Color.parseColor("#9DB2C4"); textSize = 24f; isFakeBoldText = true }
     val maxP = terrain.points.maxByOrNull { it.elevM }
     val minP = terrain.points.minByOrNull { it.elevM }
     if (maxP != null) drawContext.canvas.nativeCanvas.drawText("MÁX %.0f m".format(maxP.elevM), x(maxP.km).coerceIn(0f, w - 130f), (y(maxP.elevM) - 12f).coerceAtLeast(26f), paint)
@@ -101,12 +101,12 @@ private fun RealProfileCanvas(terrain: TerrainProfile) {
 // Las 3 explicaciones del valle de Tuxtla (conocimiento local verificado).
 @Composable
 private fun TuxtlaTexts() {
-  Text("1 · Canalización en el cañón", fontWeight = FontWeight.Bold)
-  Text("Un paso estrecho entre paredes acelera el aire (efecto Venturi). Si el viento regional sopla del norte, dentro del cañón puede ser claramente más fuerte que en la ciudad.", style = MaterialTheme.typography.bodySmall)
-  Text("2 · Flujo sobre el valle", fontWeight = FontWeight.Bold)
-  Text("Sobre la mancha urbana el aire se frena con el suelo y los edificios: hay más viento a 60-120 m de altura que a ras de piso. Por eso el despegue en calma no garantiza un vuelo tranquilo.", style = MaterialTheme.typography.bodySmall)
-  Text("3 · Ascenso y sotavento en Copoya", fontWeight = FontWeight.Bold)
-  Text("El viento enfrenta la ladera, sube (bueno para sostener el dron) y justo detrás del filo se forman remolinos descendentes. Evita volar pegado a la cara protegida de la meseta.", style = MaterialTheme.typography.bodySmall)
+  Text("1 · Canalización en el cañón", fontWeight = FontWeight.Bold, color = Geo.Text)
+  Text("Un paso estrecho entre paredes acelera el aire (efecto Venturi). Si el viento regional sopla del norte, dentro del cañón puede ser claramente más fuerte que en la ciudad.", style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
+  Text("2 · Flujo sobre el valle", fontWeight = FontWeight.Bold, color = Geo.Text)
+  Text("Sobre la mancha urbana el aire se frena con el suelo y los edificios: hay más viento a 60-120 m de altura que a ras de piso. Por eso el despegue en calma no garantiza un vuelo tranquilo.", style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
+  Text("3 · Ascenso y sotavento en Copoya", fontWeight = FontWeight.Bold, color = Geo.Text)
+  Text("El viento enfrenta la ladera, sube (bueno para sostener el dron) y justo detrás del filo se forman remolinos descendentes. Evita volar pegado a la cara protegida de la meseta.", style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
 }
 
 // Esquema viejo del valle (solo si el perfil real no cargó y es Tuxtla).

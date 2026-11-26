@@ -1,5 +1,58 @@
 # Changelog — GeoViento
 
+## [1.3.0] - 2026-11-26
+- REDISEÑO (inspirado en la estructura de DroneCheck, con identidad
+  propia de GeoViento, sin copiar su código): tema oscuro azul marino,
+  navegación inferior con 4 pestañas (Inicio, Mapa, Pronóstico, Más) y
+  tarjetas oscuras redondeadas. NADA de lo que funcionaba se perdió:
+  semáforo, Open-Meteo + met.no, mapa WebView/Leaflet, gráfica por hora,
+  ventanas, calculadora por altura, checklist, informe PDF, lista DJI,
+  búsqueda de lugar, diagnóstico bajo el mapa, versión al pie y el
+  handler de crash permanente siguen exactamente igual (el mapa sigue
+  siendo WebView: nada de mapa nativo, por el historial de crashes).
+- INICIO: búsqueda "¿A dónde vamos a volar?", banner de estado tocable
+  (→ Motivos), tarjetas 2×2 (Viento, Ráfagas, Visibilidad, Prob. de
+  lluvia), tira "Mejores horas de hoy", tarjeta Índice Kp (NOAA SWPC,
+  "No disponible" si falla, sin bloquear nada) y tarjeta Plan de vuelo.
+- MOTIVOS DEL ESTADO DE VUELO: 10 factores con chip (Dentro del umbral
+  / Precaución / Peligro / Pendiente): espacio aéreo (Pendiente, sin
+  verificación en vivo — igual que DroneCheck), vigencia del clima,
+  viento a 10 m, viento a la altura prevista, precipitación, visibilidad
+  (Peligro si < 1 km), temperatura, ubicación del despegue, duración
+  prevista y Kp. Un "Pendiente" nunca bloquea el vuelo.
+- MAPA: base oscura CartoDB Dark Matter con respaldo automático a OSM
+  si las teselas oscuras fallan; capa de radar de lluvia ANIMADA
+  (RainViewer, API pública sin llave, verificada 2026-11-26: HTTP 200,
+  PNG 256×256) con play/pausa y opacidad 0.6; controles de capas
+  visibles (Viento, Radar, Clima); la capa Clima muestra nubosidad y
+  precipitación de Open-Meteo (el satélite de RainViewer venía vacío en
+  la respuesta del 2026-11-26 y no se depende de él); hoja inferior con
+  los 9 datos del punto (viento, ráfagas, temperatura, dirección,
+  visibilidad, presión, precipitación, nubosidad, humedad). Si el radar
+  no carga, simplemente no se muestra y la app sigue normal.
+- PRONÓSTICO: temperatura grande, condición, resto del día, pestañas
+  Hoy/Mañana/+2 días (el pronóstico trae 72 h), tira por hora con prob.
+  de lluvia, banner de horas con peligro y tarjetas "Evita despegar en
+  esta hora". La gráfica y las ventanas siguen, con la unidad elegida.
+- MÁS: Mis drones (lista DJI completa), Preferencias de vuelo
+  (duración, margen de viento 0–50% que se aplica al semáforo, tipo de
+  operación, unidades de velocidad/temperatura, altura opcional,
+  guardadas en el teléfono), Informe PDF (movido aquí sin cambiar su
+  lógica), Espacio aéreo y Notificaciones (Próximamente), Apariencia y
+  ubicación, Fuentes de datos (con el diagnóstico de conexión y los
+  enlaces SENEAM), Aviso de seguridad, Privacidad, Apoyar y Acerca de.
+- DATOS NUEVOS: visibilidad, nubosidad y precipitación (mm) se piden ya
+  a Open-Meteo (current + hourly); el Kp se pide en paralelo a NOAA SWPC
+  y nunca bloquea la carga del viento. La ventana por hora pasó de 24 h
+  a 72 h solo para las pestañas del pronóstico: todo lo que usaba 24 h
+  (gráfica, ventanas, calculadora, checklist, PDF, aviso de tarde)
+  sigue tomando las primeras 24 h o filtrando por la fecha de hoy.
+- SIN ROMPER NADA (regla de Gabo): cada mejora nueva se hizo con
+  valores por defecto que conservan el comportamiento anterior (margen
+  0%, unidades m/s y °C, radar y clima apagados por defecto, Kp
+  opcional). Si algo nuevo falla (Kp, radar, teselas oscuras), la app
+  sigue con lo de siempre.
+
 ## [1.2.4] - 2026-11-12
 - MAPA (diagnóstico + otro intento): la 1.2.3 seguía en blanco CON
   Leaflet local y sin caer al esquema (versión 1.2.3 confirmada por

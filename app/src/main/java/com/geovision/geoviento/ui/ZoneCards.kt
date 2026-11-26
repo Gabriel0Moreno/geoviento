@@ -20,15 +20,15 @@ fun ZoneCards(selectedZone: String?, onZoneSelected: (String?) -> Unit) {
     Card(
       onClick = { onZoneSelected(if (selected) null else z.name) },
       modifier = Modifier.fillMaxWidth(),
-      colors = CardDefaults.cardColors(containerColor = if (selected) androidx.compose.ui.graphics.Color(0xFFE0F0E4) else androidx.compose.ui.graphics.Color(0xFFE8EEF2))
+      colors = CardDefaults.cardColors(containerColor = if (selected) Geo.SelectedGreenBg else Geo.Card)
     ) {
       Column(Modifier.padding(12.dp)) {
         Row {
-          Text("${i + 1}  ${z.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-          Text("${z.elevM} m", style = MaterialTheme.typography.bodySmall)
+          Text("${i + 1}  ${z.name}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), color = Geo.Text)
+          Text("${z.elevM} m", style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
         }
-        Text(z.note, style = MaterialTheme.typography.bodySmall)
-        Text(z.tag, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color(0xFF1B7A3D))
+        Text(z.note, style = MaterialTheme.typography.bodySmall, color = Geo.Muted)
+        Text(z.tag, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Geo.Green)
       }
     }
     Spacer(Modifier.height(8.dp))

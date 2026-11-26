@@ -56,7 +56,10 @@ object PdfReport {
         canvas.drawText(text, 40f, y, paint); y += 22f
       }
       val hourly = day?.hourly ?: report.hourly
-      val chosen = hourly.firstOrNull { it.time.substringAfter("T").startsWith(hour) } ?: hourly.firstOrNull()
+      // La tabla es de 24 h: el reporte en vivo ahora trae hasta 72 h
+      // (pestañas del pronóstico) y aquí solo va el primer día.
+      val hourly24 = hourly.take(24)
+      val chosen = hourly24.firstOrNull { it.time.substringAfter("T").startsWith(hour) } ?: hourly24.firstOrNull()
       val factor = logWindFactor(altitudeM.toDouble())
       line("Geoviento Mx — Informe técnico de vuelo", title); y += 8f
       line("Dron: ${drone.name} (límite de ráfaga ${drone.limit} m/s)", head)

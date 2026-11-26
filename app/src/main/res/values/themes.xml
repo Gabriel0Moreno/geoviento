@@ -1,1 +1,7 @@
-<resources><style name="Theme.GeoViento" parent="android:Theme.Material.Light.NoActionBar" /></resources>
+<resources><style name="Theme.GeoViento" parent="android:Theme.Material.NoActionBar">
+    <!-- v1.3.0: la app es de tema oscuro (fondo azul marino propio); el
+         tema del sistema solo pinta la ventana detrás de Compose. -->
+    <item name="android:windowBackground">#0A1622</item>
+    <item name="android:statusBarColor">#0A1622</item>
+    <item name="android:navigationBarColor">#152A3D</item>
+  </style></resources>

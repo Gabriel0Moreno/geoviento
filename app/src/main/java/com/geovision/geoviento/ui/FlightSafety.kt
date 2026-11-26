@@ -10,6 +10,15 @@ fun flightLevel(gustMs: Double, limit: Double = 10.7): FlightLevel = when {
   gustMs < limit -> FlightLevel.YELLOW
   else -> FlightLevel.RED
 }
+
+// Límite efectivo con el margen de seguridad de las preferencias (v1.3.0):
+// con margen m, solo se usa el (100-m)% del límite nominal del dron.
+// Con 0% (por defecto) el límite efectivo es el nominal y el semáforo
+// no cambia respecto a versiones anteriores.
+fun effectiveLimit(limit: Double, marginPct: Int): Double {
+  val m = marginPct.coerceIn(0, 50) / 100.0
+  return limit * (1.0 - m)
+}
 fun compass(deg: Double): String { val dirs = listOf("N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSO","SO","OSO","O","ONO","NO","NNO"); return dirs[((deg + 11.25) / 22.5).toInt() % 16] }
 fun kmh(ms: Double) = ms * 3.6
 
